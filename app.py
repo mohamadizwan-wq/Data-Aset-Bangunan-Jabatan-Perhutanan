@@ -17,13 +17,8 @@ def dapatkan_logo():
 
 logo_jabatan = dapatkan_logo()
 
-# 1. Konfigurasi Halaman (Dipaksa untuk sentiasa 'expanded' secara lalai)
-st.set_page_config(
-    page_title="Dashboard Aset JPNS", 
-    page_icon=logo_jabatan, 
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# 1. Konfigurasi Halaman 
+st.set_page_config(page_title="Dashboard Aset JPNS", page_icon=logo_jabatan, layout="wide")
 
 # --- SUNTIKAN CSS KORPORAT ---
 st.markdown("""
@@ -32,9 +27,6 @@ st.markdown("""
     [data-testid="stAppDeployButton"] {visibility: hidden !important;}
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
-    
-    /* PENYELAMAT BUTANG SIDEBAR: Memastikan ikon > sentiasa di lapisan paling hadapan dan boleh diklik */
-    [data-testid="collapsedControl"] { z-index: 999999 !important; }
     
     .main-title { color: #2C3E50; font-size: 32px; font-weight: 800; line-height: 1.2; letter-spacing: 0.5px; margin-bottom: 0px; }
     .sub-title { color: #7F8C8D; font-size: 16px; font-weight: 500; margin-top: 5px; margin-bottom: 25px;}
@@ -251,11 +243,7 @@ if df_master is not None and not df_master.empty:
     # 6. JADUAL PERINCIAN
     st.markdown('<div class="section-header">Log Perincian Pangkalan Data Aset</div>', unsafe_allow_html=True)
     
-    lajur_paparan = ['Nama_Fasiliti', 'Kategori_Fasiliti', 'Lokasi', 'Daerah Sivil', 'Daerah Pentadbiran', 'Status_Bersih', 'Jenis_Building', 'Pautan_Peta']
-    # Membetulkan ralat nama kekunci lajur jenis bangunan pangkalan data sedia ada
-    if 'Jenis_Bangunan' in df_filtered.columns:
-        lajur_paparan = ['Nama_Fasiliti', 'Kategori_Fasiliti', 'Lokasi', 'Daerah Sivil', 'Daerah Pentadbiran', 'Status_Bersih', 'Jenis_Bangunan', 'Pautan_Peta']
-        
+    lajur_paparan = ['Nama_Fasiliti', 'Kategori_Fasiliti', 'Lokasi', 'Daerah Sivil', 'Daerah Pentadbiran', 'Status_Bersih', 'Jenis_Bangunan', 'Pautan_Peta']
     lajur_paparan = [kolum for kolum in lajur_paparan if kolum in df_filtered.columns]
     
     if total_aset > 0:
