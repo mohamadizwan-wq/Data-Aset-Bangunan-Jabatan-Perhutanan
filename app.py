@@ -24,14 +24,14 @@ st.markdown("""
     <style>
     /* 1. Sembunyikan Ikon Kucing (GitHub) & Toolbar Atas */
     [data-testid="stToolbar"] {visibility: hidden !important;}
-
+    
     /* 2. Sembunyikan Menu Tiga Garis (Hamburger Menu) */
     #MainMenu {visibility: hidden !important;}
-
+    
     /* 3. Sembunyikan tulisan 'Made with Streamlit' di bawah */
     footer {visibility: hidden !important;}
-
-    /* Style Tajuk Utama Anda (Dikekalkan) */
+    
+    /* Style Tajuk Utama Anda */
     .main-title { color: #1b5e20; font-size: 38px; font-weight: bold; line-height: 1.2; }
     .sub-title { color: #4e342e; font-size: 18px; margin-top: 5px; }
     </style>
@@ -61,10 +61,8 @@ def proses_multilink_drive(val):
         if "drive.google.com" in url:
             try:
                 file_id = None
-                if "/file/d/" in url:
-                    file_id = url.split("/file/d/")[1].split("/")[0]
-                elif "id=" in url:
-                    file_id = url.split("id=")[1].split("&")[0]
+                if "/file/d/" in url: file_id = url.split("/file/d/")[1].split("/")[0]
+                elif "id=" in url: file_id = url.split("id=")[1].split("&")[0]
                 if file_id:
                     processed_links.append(f"https://lh3.googleusercontent.com/d/{file_id}")
             except:
@@ -203,7 +201,7 @@ def load_all_data_combined():
 df_master = load_all_data_combined()
 
 if df_master is not None and not df_master.empty:
-    # 3. SIDEBAR: HANYA TAPISAN DAERAH PENTADBIRAN (DENGAN IKON B&W)
+    # 3. SIDEBAR: TAPISAN DAERAH PENTADBIRAN
     st.sidebar.header("🔍 Tapisan Profil JPNS")
     
     senarai_pentadbiran = sorted(df_master["Daerah Pentadbiran"].unique().tolist())
@@ -215,7 +213,6 @@ if df_master is not None and not df_master.empty:
     
     # Proses Logik Penapisan
     df_filtered = df_master.copy()
-    
     if pentadbiran_terpilih != "⊞ SEMUA DAERAH PENTADBIRAN":
         df_filtered = df_filtered[df_filtered["Daerah Pentadbiran"] == pentadbiran_terpilih]
 
@@ -278,6 +275,9 @@ if df_master is not None and not df_master.empty:
                 df_display,
                 column_config={
                     "Bil.": st.column_config.NumberColumn("No.", width="small"),
+                    # --- DI SINI KITA KUKUHKAN NAMA PENUH TANPA UNDERSCORE ---
+                    "Status_Bersih": st.column_config.TextColumn("Status Kondisi"),
+                    "Jenis_Bangunan": st.column_config.TextColumn("Kategori Bangunan"),
                     "Pautan_Peta": st.column_config.LinkColumn("🗺️ Peta", display_text="Buka Peta 📍")
                 },
                 use_container_width=True, hide_index=True
@@ -287,7 +287,7 @@ if df_master is not None and not df_master.empty:
         
     with tab2:
         if total_aset > 0:
-            st.table(df_filtered["Jenis_Bangunan"].value_counts().reset_index().rename(columns={'index':'Jenis', 'Jenis_Bangunan':'Jumlah'}))
+            st.table(df_filtered["Jenis_Bangunan"].value_counts().reset_index().rename(columns={'index':'Kategori', 'Jenis_Bangunan':'Jumlah'}))
         else:
             st.info("Tiada ringkasan kategori.")
 
@@ -307,7 +307,7 @@ if df_master is not None and not df_master.empty:
                 if isinstance(r['Senarai_Imej'], list):
                     senarai_imej.extend(r['Senarai_Imej'])
             
-            senarai_imej = list(dict.fromkeys(senarai_imej)) # Buang link bertindih jika ada
+            senarai_imej = list(dict.fromkeys(senarai_imej))
             
             if len(senarai_imej) > 0:
                 num_images = len(senarai_imej)
