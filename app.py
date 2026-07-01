@@ -17,35 +17,41 @@ def dapatkan_logo():
 
 logo_jabatan = dapatkan_logo()
 
-# 1. Konfigurasi Halaman 
-st.set_page_config(page_title="Sistem Dashboard Aset Bangunan JPNS", page_icon=logo_jabatan, layout="wide")
+# 1. Konfigurasi Halaman (Lebar Penuh & Bersih)
+st.set_page_config(page_title="Dashboard Aset JPNS", page_icon=logo_jabatan, layout="wide")
 
+# --- SUNTIKAN CSS KORPORAT (Eksklusif, Minimalis, Kemas) ---
 st.markdown("""
     <style>
-    /* Sembunyikan Elemen GitHub & Streamlit supaya nampak 100% Korporat */
+    /* Sembunyikan elemen teknikal */
     [data-testid="stToolbar"] {visibility: hidden !important;}
     [data-testid="stAppDeployButton"] {visibility: hidden !important;}
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     
-    /* Style Tajuk Utama */
-    .main-title { color: #1b5e20; font-size: 38px; font-weight: bold; line-height: 1.2; }
-    .sub-title { color: #4e342e; font-size: 18px; margin-top: 5px; }
+    /* Tipografi Korporat */
+    .main-title { color: #2C3E50; font-size: 32px; font-weight: 800; line-height: 1.2; letter-spacing: 0.5px; margin-bottom: 0px; }
+    .sub-title { color: #7F8C8D; font-size: 16px; font-weight: 500; margin-top: 5px; margin-bottom: 25px;}
+    .section-header { color: #34495E; font-size: 18px; font-weight: 700; border-bottom: 2px solid #E5E7E9; padding-bottom: 8px; margin-top: 25px; margin-bottom: 15px;}
+    
+    /* Kemaskan Jadual Streamlit */
+    [data-testid="stDataFrame"] { border-radius: 8px; overflow: hidden; box-shadow: 0px 4px 10px rgba(0,0,0,0.05); }
+    
+    /* Cantikkan Kotak Metrik */
+    [data-testid="stMetricValue"] { font-size: 26px !important; color: #1b5e20; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- BAHAGIAN TAJUK DAN LOGO ---
-col_logo, col_tajuk = st.columns([1, 8])
+col_logo, col_tajuk = st.columns([1, 9])
 with col_logo:
     if isinstance(logo_jabatan, Image.Image):
-        st.image(logo_jabatan, width=110)
+        st.image(logo_jabatan, width=90)
     else:
         st.info("Logo")
 with col_tajuk:
-    st.markdown('<div class="main-title">Sistem Dashboard Interaktif Aset Bangunan</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-title">Jabatan Perhutanan Negeri Sembilan (JPNS)</div>', unsafe_allow_html=True)
-
-st.markdown("---")
+    st.markdown('<div class="main-title">SISTEM DASHBOARD ASET BANGUNAN</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-title">JABATAN PERHUTANAN NEGERI SEMBILAN (JPNS)</div>', unsafe_allow_html=True)
 
 # FUNGSI PINTAR: Memproses pelbagai link Google Drive
 def proses_multilink_drive(val):
@@ -66,16 +72,15 @@ def proses_multilink_drive(val):
                 pass
     return processed_links
 
-# 2. Fungsi Membaca Data (Pengesan Baris & Ejaan Automatik - SUPER KEBAL)
+# 2. Fungsi Membaca Data
 def load_all_data_combined():
     try:
         xls = pd.ExcelFile('data.xlsx')
         all_sheets_list = []
         
         for sheet in xls.sheet_names:
-            # 1. BACA TANPA SKIP UNTUK MENCARI BARIS TAJUK (HEADER) SEBENAR
             df_raw = pd.read_excel(xls, sheet_name=sheet, header=None)
-            header_idx = 3 # Lalai (Default)
+            header_idx = 3 
             
             for i in range(min(15, len(df_raw))):
                 row_vals = [str(x).lower() for x in df_raw.iloc[i].values]
@@ -83,11 +88,9 @@ def load_all_data_combined():
                     header_idx = i
                     break
             
-            # 2. BACA SEMULA MENGGUNAKAN BARIS TAJUK YANG DIKESAN
             df = pd.read_excel(xls, sheet_name=sheet, skiprows=header_idx)
             df = df.dropna(how='all')
             df = df.fillna("-")
-            
             df.columns = [str(c).strip() for c in df.columns]
             
             daerah_sivil_col = None
@@ -122,9 +125,11 @@ def load_all_data_combined():
             else:
                 continue 
                 
-            new_df = new_df[(new_df['Nama_Fasiliti'] != "-") & (new_df['Nama_Fasiliti'] != "") & (~new_df['Nama_Fasiliti'].str.lower().isin(["nan", "none"]))]
-            valid_indices = new_df.index
+            saringan_nama = new_df['Nama_Fasiliti'].str.lower()
+            mask_sah = ~(saringan_nama.isin(['nan', 'none', '-', '', 'null'])) & (new_df['Nama_Fasiliti'].str.len() > 3) & (~saringan_nama.str.startswith('http'))
+            new_df = new_df[mask_sah]
             
+            valid_indices = new_df.index
             if len(valid_indices) == 0:
                 continue
                 
@@ -136,13 +141,13 @@ def load_all_data_combined():
             if daerah_pentadbiran_col: new_df['Daerah Pentadbiran'] = df.loc[valid_indices, daerah_pentadbiran_col].astype(str).str.strip().str.upper()
             else: new_df['Daerah Pentadbiran'] = "Tidak Dinyatakan"
                 
-            if lokasi_col: new_df['Lokasi'] = df.loc[valid_indices, lokasi_col].astype(str).str.strip()
+            if lokasi_col: new_df['Lokasi'] = df.loc[valid_indices, lokasi_col].astype(str).str.strip().str.title()
             else: new_df['Lokasi'] = "-"
 
             if status_col:
                 status_series = df.loc[valid_indices, status_col].astype(str)
-                new_df['Status_Bersih'] = status_series.apply(lambda x: x.split('/')[0].strip() if '/' in x else x)
-                new_df['Jenis_Bangunan'] = status_series.apply(lambda x: x.split('/')[1].strip() if '/' in x else "-")
+                new_df['Status_Bersih'] = status_series.apply(lambda x: x.split('/')[0].strip().title() if '/' in x else x.strip().title())
+                new_df['Jenis_Bangunan'] = status_series.apply(lambda x: x.split('/')[1].strip().title() if '/' in x else "-")
             else:
                 new_df['Status_Bersih'] = "-"
                 new_df['Jenis_Bangunan'] = "-"
@@ -187,121 +192,116 @@ def load_all_data_combined():
             return combined_df
         return None
     except Exception as e:
-        st.error(f"Ralat teknikal pembacaan Excel: {e}")
+        st.error(f"Ralat Sistem: {e}")
         return None
 
 df_master = load_all_data_combined()
 
 if df_master is not None and not df_master.empty:
-    # 3. SIDEBAR: SISTEM DWI-TAPISAN
-    st.sidebar.header("🔍 Tapisan Profil JPNS")
+    # 3. SIDEBAR KORPORAT (Telah Diterbalikkan Susunannya)
+    st.sidebar.markdown('<div class="section-header">Panel Tapisan Aset</div>', unsafe_allow_html=True)
     
-    senarai_kategori = sorted(df_master["Kategori_Fasiliti"].unique().tolist())
-    kategori_terpilih = st.sidebar.selectbox(
-        "▤ Pilih Kategori Fasiliti:",
-        options=["⊞ SEMUA KATEGORI"] + senarai_kategori,
+    # 1. Pilihan Daerah Pentadbiran (Di Atas)
+    senarai_pentadbiran = sorted(df_master["Daerah Pentadbiran"].unique().tolist())
+    pentadbiran_terpilih = st.sidebar.selectbox(
+        "Daerah Pentadbiran:",
+        options=["■ SEMUA PENTADBIRAN"] + senarai_pentadbiran,
         index=0
     )
     
-    senarai_pentadbiran = sorted(df_master["Daerah Pentadbiran"].unique().tolist())
-    pentadbiran_terpilih = st.sidebar.selectbox(
-        "❖ Pilih Daerah Pentadbiran:",
-        options=["⊞ SEMUA DAERAH PENTADBIRAN"] + senarai_pentadbiran,
+    # 2. Pilihan Kategori Fasiliti (Di Bawah)
+    senarai_kategori = sorted(df_master["Kategori_Fasiliti"].unique().tolist())
+    kategori_terpilih = st.sidebar.selectbox(
+        "Kategori Fasiliti:",
+        options=["■ SEMUA KATEGORI"] + senarai_kategori,
         index=0
     )
     
     df_filtered = df_master.copy()
     
-    if kategori_terpilih != "⊞ SEMUA KATEGORI":
+    if kategori_terpilih != "■ SEMUA KATEGORI":
         df_filtered = df_filtered[df_filtered["Kategori_Fasiliti"] == kategori_terpilih]
         
-    if pentadbiran_terpilih != "⊞ SEMUA DAERAH PENTADBIRAN":
+    if pentadbiran_terpilih != "■ SEMUA PENTADBIRAN":
         df_filtered = df_filtered[df_filtered["Daerah Pentadbiran"] == pentadbiran_terpilih]
 
-    t_kategori = kategori_terpilih.replace("⊞ ", "")
-    t_pentadbiran = pentadbiran_terpilih.replace("⊞ ", "")
+    t_kategori = kategori_terpilih.replace("■ ", "")
+    t_pentadbiran = pentadbiran_terpilih.replace("■ ", "")
 
-    # 4. Ringkasan Eksekutif Dinamik
+    # 4. RINGKASAN EKSEKUTIF (Kemas & Profesional - 4 Kotak)
     total_aset = len(df_filtered)
     aset_baik = df_filtered['Status_Bersih'].str.contains('Baik', case=False, na=False).sum()
     
-    m1, m2, m3 = st.columns(3)
-    with m1: st.metric(label="■ Jumlah Keseluruhan Aset", value=f"{total_aset} Buah")
-    with m2: st.metric(label="■ Kategori & Pentadbiran", value=f"{t_kategori[:12]} | {t_pentadbiran}")
-    with m3: st.metric(label="■ Kondisi Berstatus Baik", value=f"{aset_baik} Unit")
-        
-    st.markdown("---")
+    # Pecahkan kepada 4 lajur supaya tulisan tidak sempit dan terpotong
+    m1, m2, m3, m4 = st.columns(4)
+    with m1: st.metric(label="Jumlah Keseluruhan", value=f"{total_aset} Buah")
+    with m2: st.metric(label="Daerah Pentadbiran", value=t_pentadbiran)
+    with m3: st.metric(label="Kategori Terpilih", value=t_kategori)
+    with m4: st.metric(label="Kondisi Baik", value=f"{aset_baik} Unit")
 
-    # 5. Visualisasi Grafik Komprehensif
+    # 5. VISUALISASI GRAFIK (Warna-Warni Korporat)
     col1, col2 = st.columns([1, 1])
     with col1:
-        st.markdown("### 📈 Taburan Mengikut Daerah Sivil")
+        st.markdown('<div class="section-header">Taburan Aset Mengikut Daerah Sivil</div>', unsafe_allow_html=True)
         kiraan_sivil = df_filtered["Daerah Sivil"].value_counts().reset_index()
         kiraan_sivil.columns = ['Daerah Sivil', 'Jumlah']
         if not kiraan_sivil.empty and total_aset > 0:
-            fig_bar = px.bar(kiraan_sivil, x='Daerah Sivil', y='Jumlah', text='Jumlah', color='Daerah Sivil', color_discrete_sequence=px.colors.sequential.Greens_r, template='plotly_white')
+            fig_bar = px.bar(kiraan_sivil, x='Daerah Sivil', y='Jumlah', text='Jumlah', color='Daerah Sivil', template='plotly_white')
             fig_bar.update_traces(textposition='outside')
+            fig_bar.update_layout(showlegend=False, xaxis_title=None, yaxis_title=None, margin=dict(t=10, b=10, l=0, r=0))
             st.plotly_chart(fig_bar, use_container_width=True)
         else:
-            st.info("Tiada statistik grafik dipaparkan.")
+            st.info("Tiada data untuk dipaparkan.")
 
     with col2:
-        st.markdown("### 📊 Status Kondisi Semasa")
+        st.markdown('<div class="section-header">Pecahan Status Kondisi Keseluruhan</div>', unsafe_allow_html=True)
         kiraan_status = df_filtered["Status_Bersih"].value_counts().reset_index()
         kiraan_status.columns = ['Status Kondisi', 'Jumlah']
         if not kiraan_status.empty and total_aset > 0:
-            fig_status = px.bar(kiraan_status, x='Jumlah', y='Status Kondisi', orientation='h', text='Jumlah', color='Status Kondisi', color_discrete_sequence=px.colors.sequential.YlGnBu_r, template='plotly_white')
-            fig_status.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False)
+            fig_status = px.bar(kiraan_status, x='Jumlah', y='Status Kondisi', orientation='h', text='Jumlah', color='Status Kondisi', template='plotly_white')
+            fig_status.update_traces(textposition='outside')
+            fig_status.update_layout(showlegend=False, yaxis={'categoryorder':'total ascending'}, xaxis_title=None, yaxis_title=None, margin=dict(t=10, b=10, l=0, r=0))
             st.plotly_chart(fig_status, use_container_width=True)
         else:
-            st.info("Tiada statistik status dipaparkan.")
+            st.info("Tiada data untuk dipaparkan.")
 
-    # 6. Jadual Perincian Utama
-    st.markdown(f"### 📋 Log Perincian Data")
+    # 6. JADUAL PERINCIAN
+    st.markdown('<div class="section-header">Log Perincian Pangkalan Data Aset</div>', unsafe_allow_html=True)
     
-    tab1, tab2 = st.tabs(["🗂️ Jadual Pangkalan Data Penuh", "🏢 Ringkasan Jenis Bangunan"])
+    lajur_paparan = ['Nama_Fasiliti', 'Kategori_Fasiliti', 'Lokasi', 'Daerah Sivil', 'Daerah Pentadbiran', 'Status_Bersih', 'Jenis_Bangunan', 'Pautan_Peta']
+    lajur_paparan = [kolum for kolum in lajur_paparan if kolum in df_filtered.columns]
     
-    with tab1:
-        lajur_paparan = ['Nama_Fasiliti', 'Kategori_Fasiliti', 'Lokasi', 'Daerah Sivil', 'Daerah Pentadbiran', 'Status_Bersih', 'Jenis_Bangunan', 'Pautan_Peta']
-        lajur_paparan = [kolum for kolum in lajur_paparan if kolum in df_filtered.columns]
-        
-        if total_aset > 0:
-            df_display = df_filtered[lajur_paparan].copy()
-            df_display = df_display.astype(str).replace(['nan', 'None', '<NA>'], '-')
-            if 'Pautan_Peta' in df_display.columns:
-                df_display['Pautan_Peta'] = df_display['Pautan_Peta'].replace('-', None)
-                
-            df_display.insert(0, 'Bil.', range(1, len(df_display) + 1))
+    if total_aset > 0:
+        df_display = df_filtered[lajur_paparan].copy()
+        df_display = df_display.astype(str).replace(['nan', 'None', '<NA>', ''], '-')
+        if 'Pautan_Peta' in df_display.columns:
+            df_display['Pautan_Peta'] = df_display['Pautan_Peta'].replace('-', None)
             
-            st.dataframe(
-                df_display,
-                column_config={
-                    "Bil.": st.column_config.NumberColumn("No.", width="small"),
-                    "Nama_Fasiliti": st.column_config.TextColumn("Nama Fasiliti / Aset"),
-                    "Kategori_Fasiliti": st.column_config.TextColumn("Kategori"),
-                    "Status_Bersih": st.column_config.TextColumn("Status Kondisi"),
-                    "Jenis_Bangunan": st.column_config.TextColumn("Jenis Bangunan"),
-                    "Pautan_Peta": st.column_config.LinkColumn("🗺️ Peta", display_text="Buka Peta 📍")
-                },
-                use_container_width=True, hide_index=True
-            )
-        else:
-            st.warning("Tiada rekod data dijumpai untuk paparan jadual ini.")
+        df_display.insert(0, 'Bil', range(1, len(df_display) + 1))
         
-    with tab2:
-        if total_aset > 0:
-            st.table(df_filtered["Jenis_Bangunan"].value_counts().reset_index().rename(columns={'index':'Kategori Bangunan', 'Jenis_Bangunan':'Jumlah'}))
-        else:
-            st.info("Tiada ringkasan kategori.")
+        st.dataframe(
+            df_display,
+            column_config={
+                "Bil": st.column_config.NumberColumn("Bil.", width="small"),
+                "Nama_Fasiliti": st.column_config.TextColumn("Nama Fasiliti / Aset"),
+                "Kategori_Fasiliti": st.column_config.TextColumn("Kategori"),
+                "Daerah Sivil": st.column_config.TextColumn("Daerah Sivil"),
+                "Daerah Pentadbiran": st.column_config.TextColumn("Pentadbiran"),
+                "Status_Bersih": st.column_config.TextColumn("Status Kondisi"),
+                "Jenis_Bangunan": st.column_config.TextColumn("Jenis Bangunan"),
+                "Pautan_Peta": st.column_config.LinkColumn("Peta Lokasi", display_text="Buka Peta")
+            },
+            use_container_width=True, hide_index=True
+        )
+    else:
+        st.warning("Rekod data tidak lengkap untuk paparan jadual ini.")
 
-    # --- BAHAGIAN GALERI ALBUM GABUNGAN PREMIUM DI BAWAH JADUAL ---
-    st.markdown("---")
-    st.markdown("### 📸 Galeri Album Foto Aset Pilihan")
-    st.markdown("*Sila pilih nama bangunan di bawah untuk melihat semua koleksi gambar.*")
+    # --- GALERI ALBUM ---
+    st.markdown('<div class="section-header">Galeri Pemerhatian Aset</div>', unsafe_allow_html=True)
     
     if total_aset > 0:
         senarai_nama_aset = sorted(df_filtered['Nama_Fasiliti'].unique().tolist())
-        aset_dipilih = st.selectbox("❖ Pilih Bangunan / Perkara Kaji:", options=senarai_nama_aset)
+        aset_dipilih = st.selectbox("Sila pilih aset dari senarai untuk paparan gambar:", options=senarai_nama_aset)
         
         df_aset_tunggal = df_filtered[df_filtered['Nama_Fasiliti'] == aset_dipilih]
         if not df_aset_tunggal.empty:
@@ -310,7 +310,7 @@ if df_master is not None and not df_master.empty:
                 if isinstance(r['Senarai_Imej'], list):
                     senarai_imej.extend(r['Senarai_Imej'])
             
-            senarai_imej = list(dict.fromkeys(senarai_imej)) # Buang link bertindih
+            senarai_imej = list(dict.fromkeys(senarai_imej))
             
             if len(senarai_imej) > 0:
                 num_images = len(senarai_imej)
@@ -318,11 +318,11 @@ if df_master is not None and not df_master.empty:
                 for idx, img_url in enumerate(senarai_imej):
                     col_idx = idx % 3
                     with cols[col_idx]:
-                        st.image(img_url, caption=f"Pandangan {idx+1}: {aset_dipilih}", use_container_width=True)
+                        st.image(img_url, caption=f"Imej {idx+1}: {aset_dipilih}", use_container_width=True)
             else:
-                st.info("ℹ️ Tiada fail imej dimasukkan untuk aset ini di dalam Excel atau pautan Google Drive tidak sah.")
+                st.info("Tiada rekod imej digital dijumpai untuk fasiliti ini di dalam pangkalan data.")
     else:
-        st.info("Tiada aset tersedia untuk paparan galeri.")
+        st.info("Pilih sekurang-kurangnya satu aset untuk paparan galeri.")
 
 else:
-    st.error("Ralat Utama: Fail 'data.xlsx' kosong atau maklumat tidak lengkap.")
+    st.error("Perhatian: Pangkalan data kosong. Sila pastikan fail Excel telah dikemaskini.")
