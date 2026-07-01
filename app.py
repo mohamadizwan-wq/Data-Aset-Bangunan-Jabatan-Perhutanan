@@ -5,8 +5,8 @@ import glob
 import urllib.parse
 from PIL import Image
 
-# 1. KONFIGURASI HALAMAN UTAMA (Mesti di atas sekali)
-st.set_page_config(page_title="Dashboard Aset JPNS", layout="wide", initial_sidebar_state="expanded")
+# 1. KONFIGURASI HALAMAN UTAMA (Sembunyikan Sidebar Secara Lalai)
+st.set_page_config(page_title="Dashboard Aset JPNS", layout="wide", initial_sidebar_state="collapsed")
 
 # --- FUNGSI MENCARI & MEMBACA LOGO JABATAN ---
 @st.cache_data
@@ -21,7 +21,7 @@ def dapatkan_logo():
 
 logo_jabatan = dapatkan_logo()
 
-# --- SUNTIKAN CSS KORPORAT KEMAS ---
+# --- SUNTIKAN CSS KORPORAT MODEN ---
 st.markdown("""
     <style>
     [data-testid="stToolbar"] {visibility: hidden !important;}
@@ -49,7 +49,7 @@ with col_tajuk:
     st.markdown('<div class="main-title">SISTEM DASHBOARD ASET BANGUNAN</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-title">JABATAN PERHUTANAN NEGERI SEMBILAN (JPNS)</div>', unsafe_allow_html=True)
 
-# Fungsi pintar mengimbas pautan gambar Google Drive dari mana-mana kolum dalam baris
+# Fungsi imbas seluruh kolum dalam baris untuk pautan imej Google Drive
 def proses_links_dari_row(df_row):
     all_processed = []
     for col_val in df_row.values:
@@ -68,7 +68,7 @@ def proses_links_dari_row(df_row):
                     except: pass
     return all_processed
 
-# Fungsi bijak mengesan pautan peta (baris semasa atau baris bawahnya)
+# Fungsi mengesan pautan Google Maps (Membaca baris semasa atau baris bawahnya)
 def dapatkan_pautan_peta(df, idx, gps_col):
     if not gps_col: return None
     val_semasa = str(df.loc[idx, gps_col]).strip()
@@ -83,7 +83,7 @@ def dapatkan_pautan_peta(df, idx, gps_col):
         return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(val_semasa)}"
     return None
 
-# 2. Fungsi Membaca Data Utama (SUPER STABIL & ADAPTIF)
+# 2. Fungsi Membaca Data Utama (Mengesan Helaian Berdasarkan Kata Kunci)
 @st.cache_data
 def load_all_data_combined():
     try:
@@ -94,34 +94,31 @@ def load_all_data_combined():
             if df_raw.empty: continue
             
             header_idx = None
-            # TEPAT: Cari baris yang mengandungi 'bil.' atau 'bil' secara mutlak
+            # Cari baris yang mengandungi penanda lajur data sebenar
             for i in range(min(20, len(df_raw))):
                 row_vals = [str(x).lower().strip() for x in df_raw.iloc[i].values]
-                if 'bil.' in row_vals or 'bil' in row_vals:
+                if ('bil.' in row_vals or 'bil' in row_vals) or any('daerah' in val or 'lokasi' in val or 'status' in val for val in row_vals):
                     header_idx = i
                     break
             
-            # Jika tak jumpa penanda 'bil', guna default baris ke-4 (skiprows=3)
             if header_idx is None:
-                header_idx = 3
+                header_idx = 4
                 
             df = pd.read_excel(xls, sheet_name=sheet, skiprows=header_idx)
             df = df.dropna(how='all').fillna("-")
             df.columns = [str(c).strip() for c in df.columns]
             
-            daerah_sivil_col = None; daerah_pentadbiran_col = None; status_col = None
-            gps_col = None; gambar_perkara_col = None; lokasi_col = None
+            daerah_sivil_col = None; daerah_pentadbiran_col = None; status_col = None; gps_col = None; gambar_perkara_col = None
 
             for c in df.columns:
-                c_low = c.lower()
+                c_low = str(c).lower().strip()
                 if 'sivil' in c_low: daerah_sivil_col = c
                 elif 'pentadbiran' in c_low: daerah_pentadbiran_col = c
                 elif c_low == 'daerah' and not daerah_sivil_col: daerah_sivil_col = c
                 elif 'status' in c_low or 'kefungsian' in c_low: status_col = c
                 elif 'gps' in c_low or 'kedudukan' in c_low: gps_col = c
-                elif any(kata in c_low for kata in ['perkara', 'aset', 'bangunan', 'fasiliti', 'nama']):
+                elif any(kata in c_low for kata in ['perkara', 'aset', 'gambar', 'nama', 'bangunan', 'fasiliti']):
                     if not gambar_perkara_col: gambar_perkara_col = c
-                elif 'lokasi' in c_low: lokasi_col = c
 
             if not daerah_sivil_col:
                 for c in df.columns:
@@ -150,9 +147,6 @@ def load_all_data_combined():
             if daerah_pentadbiran_col: new_df['Daerah Pentadbiran'] = df.loc[valid_indices, daerah_pentadbiran_col].astype(str).str.strip().str.upper()
             else: new_df['Daerah Pentadbiran'] = "Tidak Dinyatakan"
                 
-            if lokasi_col: new_df['Lokasi'] = df.loc[valid_indices, lokasi_col].astype(str).str.strip().str.title()
-            else: new_df['Lokasi'] = "-"
-
             if status_col:
                 status_series = df.loc[valid_indices, status_col].astype(str)
                 new_df['Status_Bersih'] = status_series.apply(lambda x: x.split('/')[0].strip().title() if '/' in x else x.strip().title())
@@ -160,10 +154,7 @@ def load_all_data_combined():
             else:
                 new_df['Status_Bersih'] = "-"; new_df['Jenis_Bangunan'] = "-"
 
-            # Gunakan fungsi bijak pautan peta
             new_df['Pautan_Peta'] = [dapatkan_pautan_peta(df, idx, gps_col) for idx in valid_indices]
-            
-            # Gunakan fungsi imbas seluruh kolum untuk gambar
             new_df['Senarai_Imej'] = [proses_links_dari_row(df.loc[idx]) for idx in valid_indices]
             
             if not new_df.empty: all_sheets_list.append(new_df)
@@ -179,16 +170,20 @@ if isinstance(df_master, str):
     st.error(f"Sistem gagal membaca fail Excel. Mesej Ralat: {df_master}")
 elif df_master is not None and not df_master.empty:
     
-    # 3. SIDEBAR DENGAN TAPISAN DINAMIK
-    st.sidebar.markdown('<div class="section-header">Panel Tapisan Aset</div>', unsafe_allow_html=True)
+    # 3. PANEL TAPISAN UTAMA (Terus di bawah Logo & Tajuk)
+    st.markdown('<div class="section-header">Panel Saringan Maklumat Profil JPNS</div>', unsafe_allow_html=True)
     
-    senarai_pentadbiran = sorted(df_master["Daerah Pentadbiran"].unique().tolist())
-    pentadbiran_terpilih = st.sidebar.selectbox(
-        "Daerah Pentadbiran:",
-        options=["■ SEMUA PENTADBIRAN"] + senarai_pentadbiran,
-        index=0
-    )
+    col_tapis1, col_tapis2 = st.columns(2)
     
+    with col_tapis1:
+        senarai_pentadbiran = sorted(df_master["Daerah Pentadbiran"].unique().tolist())
+        pentadbiran_terpilih = st.selectbox(
+            "Pilih Daerah Pentadbiran:",
+            options=["■ SEMUA PENTADBIRAN"] + senarai_pentadbiran,
+            index=0
+        )
+    
+    # Saringan dinamik bertingkat
     if pentadbiran_terpilih != "■ SEMUA PENTADBIRAN":
         df_sementara_kategori = df_master[df_master["Daerah Pentadbiran"] == pentadbiran_terpilih]
     else:
@@ -196,20 +191,23 @@ elif df_master is not None and not df_master.empty:
         
     senarai_kategori_dinamik = sorted(df_sementara_kategori["Kategori_Fasiliti"].unique().tolist())
     
-    kategori_terpilih = st.sidebar.selectbox(
-        "Kategori Fasiliti:",
-        options=["■ SEMUA KATEGORI"] + senarai_kategori_dinamik,
-        index=0
-    )
+    with col_tapis2:
+        kategori_terpilih = st.selectbox(
+            "Pilih Kategori Fasiliti:",
+            options=["■ SEMUA KATEGORI"] + senarai_kategori_dinamik,
+            index=0
+        )
     
+    # Proses Tapis Akhir
     df_filtered = df_master.copy()
     if pentadbiran_terpilih != "■ SEMUA PENTADBIRAN":
-        df_filtered = df_filtered[df_filtered["Daerah Pentadbiran"] == pentadbiran_terpiph]
+        df_filtered = df_filtered[df_filtered["Daerah Pentadbiran"] == pentadbiran_terpilih]
     if kategori_terpilih != "■ SEMUA KATEGORI":
         df_filtered = df_filtered[df_filtered["Kategori_Fasiliti"] == kategori_terpilih]
 
     t_kategori = kategori_terpilih.replace("■ ", "")
     t_pentadbiran = pentadbiran_terpilih.replace("■ ", "")
+    st.markdown("---")
 
     # 4. RINGKASAN EKSEKUTIF (4 Kotak)
     total_aset = len(df_filtered)
@@ -250,7 +248,7 @@ elif df_master is not None and not df_master.empty:
     # 6. JADUAL PERINCIAN
     st.markdown('<div class="section-header">Log Perincian Pangkalan Data Aset</div>', unsafe_allow_html=True)
     
-    lajur_paparan = ['Nama_Fasiliti', 'Kategori_Fasiliti', 'Lokasi', 'Daerah Sivil', 'Daerah Pentadbiran', 'Status_Bersih', 'Jenis_Bangunan', 'Pautan_Peta']
+    lajur_paparan = ['Nama_Fasiliti', 'Kategori_Fasiliti', 'Daerah Sivil', 'Daerah Pentadbiran', 'Status_Bersih', 'Jenis_Bangunan', 'Pautan_Peta']
     lajur_paparan = [kolum for kolum in lajur_paparan if kolum in df_filtered.columns]
     
     if total_aset > 0:
@@ -277,7 +275,7 @@ elif df_master is not None and not df_master.empty:
         st.warning("Rekod data tidak lengkap untuk paparan jadual ini.")
 
     # --- GALERI ALBUM ---
-    st.markdown('<div class="section-header">Galeri Pemerhatian Aset</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">Galeri Pemerhatian Imej Digital Aset</div>', unsafe_allow_html=True)
     
     if total_aset > 0:
         senarai_nama_aset = sorted(df_filtered['Nama_Fasiliti'].unique().tolist())
