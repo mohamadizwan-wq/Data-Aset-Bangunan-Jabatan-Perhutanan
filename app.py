@@ -5,7 +5,11 @@ import glob
 import urllib.parse
 from PIL import Image
 
+# 1. KONFIGURASI HALAMAN UTAMA (Mesti di atas sekali)
+st.set_page_config(page_title="Dashboard Aset JPNS", layout="wide", initial_sidebar_state="expanded")
+
 # --- FUNGSI MENCARI & MEMBACA LOGO JABATAN ---
+@st.cache_data
 def dapatkan_logo():
     senarai_gambar = glob.glob("*.jpg") + glob.glob("*.png") + glob.glob("*.jpeg") + glob.glob("*.JPG") + glob.glob("*.PNG")
     if len(senarai_gambar) > 0:
@@ -17,10 +21,7 @@ def dapatkan_logo():
 
 logo_jabatan = dapatkan_logo()
 
-# 1. Konfigurasi Halaman 
-st.set_page_config(page_title="Dashboard Aset JPNS", page_icon=logo_jabatan, layout="wide")
-
-# --- SUNTIKAN CSS KORPORAT ---
+# --- SUNTIKAN CSS KORPORAT KEMAS ---
 st.markdown("""
     <style>
     [data-testid="stToolbar"] {visibility: hidden !important;}
@@ -48,53 +49,79 @@ with col_tajuk:
     st.markdown('<div class="main-title">SISTEM DASHBOARD ASET BANGUNAN</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-title">JABATAN PERHUTANAN NEGERI SEMBILAN (JPNS)</div>', unsafe_allow_html=True)
 
-def proses_multilink_drive(val):
-    val_str = str(val).strip()
-    if val_str == "-" or val_str == "" or val_str.lower() == "nan": return []
-    links = [l.strip() for l in val_str.split(",")]
-    processed_links = []
-    for url in links:
-        if "drive.google.com" in url:
-            try:
-                file_id = None
-                if "/file/d/" in url: file_id = url.split("/file/d/")[1].split("/")[0]
-                elif "id=" in url: file_id = url.split("id=")[1].split("&")[0]
-                if file_id: processed_links.append(f"https://lh3.googleusercontent.com/d/{file_id}")
-            except: pass
-    return processed_links
+# Fungsi pintar mengimbas pautan gambar Google Drive dari mana-mana kolum dalam baris
+def proses_links_dari_row(df_row):
+    all_processed = []
+    for col_val in df_row.values:
+        val_str = str(col_val).strip()
+        if "drive.google.com" in val_str:
+            if "," in val_str: links = [l.strip() for l in val_str.split(",")]
+            elif ";" in val_str: links = [l.strip() for l in val_str.split(";")]
+            else: links = [val_str]
+            for url in links:
+                if "drive.google.com" in url:
+                    try:
+                        file_id = None
+                        if "/file/d/" in url: file_id = url.split("/file/d/")[1].split("/")[0]
+                        elif "id=" in url: file_id = url.split("id=")[1].split("&")[0]
+                        if file_id: all_processed.append(f"https://lh3.googleusercontent.com/d/{file_id}")
+                    except: pass
+    return all_processed
 
-# 2. Fungsi Membaca Data
+# Fungsi bijak mengesan pautan peta (baris semasa atau baris bawahnya)
+def dapatkan_pautan_peta(df, idx, gps_col):
+    if not gps_col: return None
+    val_semasa = str(df.loc[idx, gps_col]).strip()
+    if val_semasa.lower().startswith('http'): return val_semasa
+    
+    next_idx = idx + 1
+    if next_idx in df.index:
+        val_seterusnya = str(df.loc[next_idx, gps_col]).strip()
+        if val_seterusnya.lower().startswith('http'): return val_seterusnya
+        
+    if val_semasa.lower() not in ['nan', 'none', '', '-']:
+        return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(val_semasa)}"
+    return None
+
+# 2. Fungsi Membaca Data Utama (SUPER STABIL & ADAPTIF)
+@st.cache_data
 def load_all_data_combined():
     try:
         xls = pd.ExcelFile('data.xlsx')
         all_sheets_list = []
         for sheet in xls.sheet_names:
             df_raw = pd.read_excel(xls, sheet_name=sheet, header=None)
-            header_idx = 3 
-            for i in range(min(15, len(df_raw))):
-                row_vals = [str(x).lower() for x in df_raw.iloc[i].values]
-                if any(katakunci in val for val in row_vals for katakunci in ['perkara', 'daerah', 'aset', 'bangunan', 'fasiliti', 'keterangan', 'item']):
+            if df_raw.empty: continue
+            
+            header_idx = None
+            # TEPAT: Cari baris yang mengandungi 'bil.' atau 'bil' secara mutlak
+            for i in range(min(20, len(df_raw))):
+                row_vals = [str(x).lower().strip() for x in df_raw.iloc[i].values]
+                if 'bil.' in row_vals or 'bil' in row_vals:
                     header_idx = i
                     break
             
+            # Jika tak jumpa penanda 'bil', guna default baris ke-4 (skiprows=3)
+            if header_idx is None:
+                header_idx = 3
+                
             df = pd.read_excel(xls, sheet_name=sheet, skiprows=header_idx)
             df = df.dropna(how='all').fillna("-")
             df.columns = [str(c).strip() for c in df.columns]
             
             daerah_sivil_col = None; daerah_pentadbiran_col = None; status_col = None
-            gps_col = None; gambar_perkara_col = None; lokasi_col = None; image_cols = []
+            gps_col = None; gambar_perkara_col = None; lokasi_col = None
 
             for c in df.columns:
                 c_low = c.lower()
                 if 'sivil' in c_low: daerah_sivil_col = c
                 elif 'pentadbiran' in c_low: daerah_pentadbiran_col = c
                 elif c_low == 'daerah' and not daerah_sivil_col: daerah_sivil_col = c
-                elif 'status' in c_low and 'kefungsian' in c_low: status_col = c
+                elif 'status' in c_low or 'kefungsian' in c_low: status_col = c
                 elif 'gps' in c_low or 'kedudukan' in c_low: gps_col = c
-                elif any(kata in c_low for kata in ['perkara', 'aset', 'bangunan', 'fasiliti', 'nama', 'keterangan', 'butiran', 'item']): 
-                    if not gambar_perkara_col: gambar_perkara_col = c 
+                elif any(kata in c_low for kata in ['perkara', 'aset', 'bangunan', 'fasiliti', 'nama']):
+                    if not gambar_perkara_col: gambar_perkara_col = c
                 elif 'lokasi' in c_low: lokasi_col = c
-                elif 'gambar' in c_low and 'perkara' not in c_low: image_cols.append(c)
 
             if not daerah_sivil_col:
                 for c in df.columns:
@@ -103,8 +130,10 @@ def load_all_data_combined():
                         break
 
             new_df = pd.DataFrame()
-            if gambar_perkara_col: new_df['Nama_Fasiliti'] = df[gambar_perkara_col].astype(str).str.strip()
-            else: continue 
+            if gambar_perkara_col: 
+                new_df['Nama_Fasiliti'] = df[gambar_perkara_col].astype(str).str.strip()
+            else: 
+                continue
                 
             saringan_nama = new_df['Nama_Fasiliti'].str.lower()
             mask_sah = ~(saringan_nama.isin(['nan', 'none', '-', '', 'null'])) & (new_df['Nama_Fasiliti'].str.len() > 2) & (~saringan_nama.str.startswith('http'))
@@ -113,7 +142,7 @@ def load_all_data_combined():
             valid_indices = new_df.index
             if len(valid_indices) == 0: continue
                 
-            new_df['Kategori_Fasiliti'] = str(sheet).strip().title()
+            new_df['Kategori_Fasiliti'] = str(sheet).strip().upper()
             
             if daerah_sivil_col: new_df['Daerah Sivil'] = df.loc[valid_indices, daerah_sivil_col].astype(str).str.strip().str.title()
             else: new_df['Daerah Sivil'] = "Tidak Dinyatakan"
@@ -131,48 +160,26 @@ def load_all_data_combined():
             else:
                 new_df['Status_Bersih'] = "-"; new_df['Jenis_Bangunan'] = "-"
 
-            if gps_col:
-                gps_series = df.loc[valid_indices, gps_col].astype(str)
-                def bina_link_maps(gps):
-                    gps = gps.strip()
-                    if gps.lower().startswith('http'): return gps 
-                    elif gps.lower() not in ['nan', 'none', '', '-']: return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(gps)}"
-                    return None
-                new_df['Pautan_Peta'] = gps_series.apply(bina_link_maps)
-            else: new_df['Pautan_Peta'] = None
-
-            def proses_links_dari_row(row_index):
-                all_processed = []
-                for col in image_cols:
-                    val_str = str(df.loc[row_index, col]).strip()
-                    if val_str == "-" or val_str == "" or val_str.lower() == "nan": continue
-                    if "," in val_str: links = [l.strip() for l in val_str.split(",")]
-                    elif ";" in val_str: links = [l.strip() for l in val_str.split(";")]
-                    else: links = [val_str]
-                    for url in links:
-                        if "drive.google.com" in url:
-                            try:
-                                file_id = None
-                                if "/file/d/" in url: file_id = url.split("/file/d/")[1].split("/")[0]
-                                elif "id=" in url: file_id = url.split("id=")[1].split("&")[0]
-                                if file_id: all_processed.append(f"https://lh3.googleusercontent.com/d/{file_id}")
-                            except: pass
-                return all_processed
-
-            new_df['Senarai_Imej'] = [proses_links_dari_row(idx) for idx in valid_indices]
+            # Gunakan fungsi bijak pautan peta
+            new_df['Pautan_Peta'] = [dapatkan_pautan_peta(df, idx, gps_col) for idx in valid_indices]
+            
+            # Gunakan fungsi imbas seluruh kolum untuk gambar
+            new_df['Senarai_Imej'] = [proses_links_dari_row(df.loc[idx]) for idx in valid_indices]
+            
             if not new_df.empty: all_sheets_list.append(new_df)
                 
         if len(all_sheets_list) > 0: return pd.concat(all_sheets_list, ignore_index=True)
         return None
     except Exception as e:
-        st.error(f"Ralat Sistem: {e}")
-        return None
+        return f"Ralat: {e}"
 
 df_master = load_all_data_combined()
 
-if df_master is not None and not df_master.empty:
+if isinstance(df_master, str):
+    st.error(f"Sistem gagal membaca fail Excel. Mesej Ralat: {df_master}")
+elif df_master is not None and not df_master.empty:
     
-    # 3. SIDEBAR KORPORAT
+    # 3. SIDEBAR DENGAN TAPISAN DINAMIK
     st.sidebar.markdown('<div class="section-header">Panel Tapisan Aset</div>', unsafe_allow_html=True)
     
     senarai_pentadbiran = sorted(df_master["Daerah Pentadbiran"].unique().tolist())
@@ -197,7 +204,7 @@ if df_master is not None and not df_master.empty:
     
     df_filtered = df_master.copy()
     if pentadbiran_terpilih != "■ SEMUA PENTADBIRAN":
-        df_filtered = df_filtered[df_filtered["Daerah Pentadbiran"] == pentadbiran_terpilih]
+        df_filtered = df_filtered[df_filtered["Daerah Pentadbiran"] == pentadbiran_terpiph]
     if kategori_terpilih != "■ SEMUA KATEGORI":
         df_filtered = df_filtered[df_filtered["Kategori_Fasiliti"] == kategori_terpilih]
 
@@ -214,7 +221,7 @@ if df_master is not None and not df_master.empty:
     with m3: st.metric(label="Kategori Terpilih", value=t_kategori)
     with m4: st.metric(label="Kondisi Baik", value=f"{aset_baik} Unit")
 
-    # 5. VISUALISASI GRAFIK 
+    # 5. VISUALISASI GRAFIK
     col1, col2 = st.columns([1, 1])
     with col1:
         st.markdown('<div class="section-header">Taburan Aset Mengikut Daerah Sivil</div>', unsafe_allow_html=True)
@@ -249,9 +256,7 @@ if df_master is not None and not df_master.empty:
     if total_aset > 0:
         df_display = df_filtered[lajur_paparan].copy()
         df_display = df_display.astype(str).replace(['nan', 'None', '<NA>', ''], '-')
-        if 'Pautan_Peta' in df_display.columns:
-            df_display['Pautan_Peta'] = df_display['Pautan_Peta'].replace('-', None)
-            
+        
         df_display.insert(0, 'Bil', range(1, len(df_display) + 1))
         
         st.dataframe(
@@ -264,7 +269,7 @@ if df_master is not None and not df_master.empty:
                 "Daerah Pentadbiran": st.column_config.TextColumn("Pentadbiran"),
                 "Status_Bersih": st.column_config.TextColumn("Status Kondisi"),
                 "Jenis_Bangunan": st.column_config.TextColumn("Jenis Bangunan"),
-                "Pautan_Peta": st.column_config.LinkColumn("Peta Lokasi", display_text="Buka Peta")
+                "Pautan_Peta": st.column_config.LinkColumn("Peta Lokasi", display_text="Buka Peta 📍")
             },
             use_container_width=True, hide_index=True
         )
