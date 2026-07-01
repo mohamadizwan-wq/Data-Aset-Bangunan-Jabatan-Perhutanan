@@ -21,22 +21,6 @@ logo_jabatan = dapatkan_logo()
 st.set_page_config(page_title="Sistem Dashboard Aset Bangunan JPNS", page_icon=logo_jabatan, layout="wide")
 
 st.markdown("""
-    st.markdown("""
-    <style>
-    /* 1. Sembunyikan Ikon Kucing (GitHub) & Toolbar Atas */
-    [data-testid="stToolbar"] {visibility: hidden !important;}
-
-    /* 2. Sembunyikan Menu Tiga Garis (Hamburger Menu) */
-    #MainMenu {visibility: hidden !important;}
-
-    /* 3. Sembunyikan tulisan 'Made with Streamlit' di bawah */
-    footer {visibility: hidden !important;}
-
-    /* Style Tajuk Utama Anda (Dikekalkan) */
-    .main-title { color: #1b5e20; font-size: 38px; font-weight: bold; line-height: 1.2; }
-    .sub-title { color: #4e342e; font-size: 18px; margin-top: 5px; }
-    </style>
-""", unsafe_allow_html=True)st.markdown("""
     <style>
     /* 1. Sembunyikan Ikon Kucing (GitHub) & Toolbar Atas */
     [data-testid="stToolbar"] {visibility: hidden !important;}
