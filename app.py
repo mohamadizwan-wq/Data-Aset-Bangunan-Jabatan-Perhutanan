@@ -198,10 +198,10 @@ def load_all_data_combined():
 df_master = load_all_data_combined()
 
 if df_master is not None and not df_master.empty:
-    # 3. SIDEBAR KORPORAT (Telah Diterbalikkan Susunannya)
+    # 3. SIDEBAR KORPORAT (DENGAN LOGIK TAPISAN DINAMIK BERPERINGKAT)
     st.sidebar.markdown('<div class="section-header">Panel Tapisan Aset</div>', unsafe_allow_html=True)
     
-    # 1. Pilihan Daerah Pentadbiran (Di Atas)
+    # Peringkat 1: Kotak Pilihan Daerah Pentadbiran (Membaca semua data utama)
     senarai_pentadbiran = sorted(df_master["Daerah Pentadbiran"].unique().tolist())
     pentadbiran_terpilih = st.sidebar.selectbox(
         "Daerah Pentadbiran:",
@@ -209,21 +209,30 @@ if df_master is not None and not df_master.empty:
         index=0
     )
     
-    # 2. Pilihan Kategori Fasiliti (Di Bawah)
-    senarai_kategori = sorted(df_master["Kategori_Fasiliti"].unique().tolist())
+    # 🌟 PROSES MAGIK: Tapis Kategori berdasarkan Pentadbiran yang dipilih di atas
+    if pentadbiran_terpilih != "■ SEMUA PENTADBIRAN":
+        df_sementara_kategori = df_master[df_master["Daerah Pentadbiran"] == pentadbiran_terpilih]
+    else:
+        df_sementara_kategori = df_master.copy()
+        
+    # Ambil senarai kategori unik yang BENAR-BENAR wujud bawah pentadbiran terpilih sahaja
+    senarai_kategori_dinamik = sorted(df_sementara_kategori["Kategori_Fasiliti"].unique().tolist())
+    
+    # Peringkat 2: Kotak Pilihan Kategori Fasiliti (Pilihan terhad & dikunci secara dinamik)
     kategori_terpilih = st.sidebar.selectbox(
         "Kategori Fasiliti:",
-        options=["■ SEMUA KATEGORI"] + senarai_kategori,
+        options=["■ SEMUA KATEGORI"] + senarai_kategori_dinamik,
         index=0
     )
     
+    # Proses Penapisan Akhir untuk Paparan Utama Dashboard
     df_filtered = df_master.copy()
     
-    if kategori_terpilih != "■ SEMUA KATEGORI":
-        df_filtered = df_filtered[df_filtered["Kategori_Fasiliti"] == kategori_terpilih]
-        
     if pentadbiran_terpilih != "■ SEMUA PENTADBIRAN":
         df_filtered = df_filtered[df_filtered["Daerah Pentadbiran"] == pentadbiran_terpilih]
+        
+    if kategori_terpilih != "■ SEMUA KATEGORI":
+        df_filtered = df_filtered[df_filtered["Kategori_Fasiliti"] == kategori_terpilih]
 
     t_kategori = kategori_terpilih.replace("■ ", "")
     t_pentadbiran = pentadbiran_terpilih.replace("■ ", "")
@@ -232,7 +241,6 @@ if df_master is not None and not df_master.empty:
     total_aset = len(df_filtered)
     aset_baik = df_filtered['Status_Bersih'].str.contains('Baik', case=False, na=False).sum()
     
-    # Pecahkan kepada 4 lajur supaya tulisan tidak sempit dan terpotong
     m1, m2, m3, m4 = st.columns(4)
     with m1: st.metric(label="Jumlah Keseluruhan", value=f"{total_aset} Buah")
     with m2: st.metric(label="Daerah Pentadbiran", value=t_pentadbiran)
