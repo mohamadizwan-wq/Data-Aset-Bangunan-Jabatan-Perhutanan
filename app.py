@@ -40,13 +40,11 @@ with col_tajuk:
 
 st.markdown("---")
 
-# FUNGSI PINTAR: Memecah & memproses berbilang pautan Google Drive yang dipisahkan dengan koma
+# FUNGSI PINTAR IMED: Memproses multilink drive
 def proses_multilink_drive(val):
     val_str = str(val).strip()
     if val_str == "-" or val_str == "" or val_str.lower() == "nan":
         return []
-    
-    # Pecahkan mengikut tanda koma jika pengguna letak banyak link
     links = [l.strip() for l in val_str.split(",")]
     processed_links = []
     for url in links:
@@ -57,7 +55,6 @@ def proses_multilink_drive(val):
                     file_id = url.split("/file/d/")[1].split("/")[0]
                 elif "id=" in url:
                     file_id = url.split("id=")[1].split("&")[0]
-                
                 if file_id:
                     processed_links.append(f"https://lh3.googleusercontent.com/d/{file_id}")
             except:
@@ -65,10 +62,11 @@ def proses_multilink_drive(val):
     return processed_links
 
 # 2. Fungsi Membaca Data
-def load_all_sheets():
+def load_all_data_combined():
     try:
         xls = pd.ExcelFile('data.xlsx')
-        sheet_dict = {}
+        all_sheets_list = []
+        
         for sheet in xls.sheet_names:
             df = pd.read_excel(xls, sheet_name=sheet, skiprows=3)
             df = df.dropna(how='all')
@@ -77,50 +75,66 @@ def load_all_sheets():
             # Bersihkan nama lajur asal Excel
             df.columns = [str(c).strip() for c in df.columns]
             
-            daerah_col = None
+            daerah_sivil_col = None
+            daerah_pentadbiran_col = None
             status_col = None
             gps_col = None
-            link_gambar_col = None
             gambar_perkara_col = None
             lokasi_col = None
+            image_cols = []
 
             for c in df.columns:
                 c_low = c.lower()
-                if c_low == 'daerah':
-                    daerah_col = c
-                elif 'status' in c_low and 'kefungsian' in c_low:
+                if 'sivil' in c_low: 
+                    daerah_sivil_col = c
+                elif 'pentadbiran' in c_low: 
+                    daerah_pentadbiran_col = c
+                elif c_low == 'daerah' and not daerah_sivil_col: 
+                    daerah_sivil_col = c
+                elif 'status' in c_low and 'kefungsian' in c_low: 
                     status_col = c
-                elif 'gps' in c_low or 'kedudukan' in c_low:
+                elif 'gps' in c_low or 'kedudukan' in c_low: 
                     gps_col = c
-                elif c_low == 'gambar': 
-                    link_gambar_col = c
                 elif 'gambar' in c_low and 'perkara' in c_low: 
                     gambar_perkara_col = c
-                elif 'lokasi' in c_low:
+                elif 'lokasi' in c_low: 
                     lokasi_col = c
+                elif 'gambar' in c_low: 
+                    image_cols.append(c)
 
-            if not daerah_col:
+            if not daerah_sivil_col:
                 for c in df.columns:
-                    if 'daerah' in c.lower():
-                        daerah_col = c
+                    if 'daerah' in c.lower() and 'pentadbiran' not in c.lower():
+                        daerah_sivil_col = c
                         break
 
             new_df = pd.DataFrame()
-            if daerah_col:
-                new_df['Daerah'] = df[daerah_col].astype(str).str.strip().str.title()
-                new_df = new_df[(new_df['Daerah'] != "-") & (new_df['Daerah'] != "") & (~new_df['Daerah'].str.lower().isin(["nan", "none"]))]
-            else:
-                continue
-                
-            valid_indices = new_df.index
             
             if gambar_perkara_col:
-                new_df['Gambar / Perkara'] = df.loc[valid_indices, gambar_perkara_col].astype(str)
+                new_df['Gambar / Perkara'] = df[gambar_perkara_col].astype(str).str.strip()
             else:
-                new_df['Gambar / Perkara'] = "-"
+                continue 
+                
+            new_df = new_df[(new_df['Gambar / Perkara'] != "-") & (new_df['Gambar / Perkara'] != "") & (~new_df['Gambar / Perkara'].str.lower().isin(["nan", "none"]))]
+            valid_indices = new_df.index
+            
+            if len(valid_indices) == 0:
+                continue
+                
+            new_df['Kawasan_Sheet'] = sheet
+            
+            if daerah_sivil_col:
+                new_df['Daerah Sivil'] = df.loc[valid_indices, daerah_sivil_col].astype(str).str.strip().str.title()
+            else:
+                new_df['Daerah Sivil'] = "Tidak Dinyatakan"
+                
+            if daerah_pentadbiran_col:
+                new_df['Daerah Pentadbiran'] = df.loc[valid_indices, daerah_pentadbiran_col].astype(str).str.strip().str.upper()
+            else:
+                new_df['Daerah Pentadbiran'] = "Tidak Dinyatakan"
                 
             if lokasi_col:
-                new_df['Lokasi'] = df.loc[valid_indices, lokasi_col].astype(str)
+                new_df['Lokasi'] = df.loc[valid_indices, lokasi_col].astype(str).str.strip()
             else:
                 new_df['Lokasi'] = "-"
 
@@ -144,65 +158,86 @@ def load_all_sheets():
             else:
                 new_df['Pautan_Peta'] = None
 
-            # Simpan senarai semua pautan imej yang telah diproses dalam bentuk list []
-            if link_gambar_col:
-                new_df['Senarai_Imej'] = df.loc[valid_indices, link_gambar_col].apply(proses_multilink_drive)
-            else:
-                new_df['Senarai_Imej'] = [[] for _ in range(len(new_df))]
+            def proses_links_dari_row(row_index):
+                all_processed = []
+                for col in image_cols:
+                    val_str = str(df.loc[row_index, col]).strip()
+                    if val_str == "-" or val_str == "" or val_str.lower() == "nan":
+                        continue
+                    if "," in val_str: links = [l.strip() for l in val_str.split(",")]
+                    elif ";" in val_str: links = [l.strip() for l in val_str.split(";")]
+                    else: links = [val_str]
+                    for url in links:
+                        if "drive.google.com" in url:
+                            try:
+                                file_id = None
+                                if "/file/d/" in url: file_id = url.split("/file/d/")[1].split("/")[0]
+                                elif "id=" in url: file_id = url.split("id=")[1].split("&")[0]
+                                if file_id: all_processed.append(f"https://lh3.googleusercontent.com/d/{file_id}")
+                            except: pass
+                return all_processed
+
+            new_df['Senarai_Imej'] = [proses_links_dari_row(idx) for idx in valid_indices]
 
             if not new_df.empty:
-                sheet_dict[sheet] = new_df
+                all_sheets_list.append(new_df)
                 
-        return sheet_dict
+        if len(all_sheets_list) > 0:
+            combined_df = pd.concat(all_sheets_list, ignore_index=True)
+            return combined_df
+        return None
     except Exception as e:
         st.error(f"Ralat teknikal pembacaan Excel: {e}")
         return None
 
-all_data = load_all_sheets()
+df_master = load_all_data_combined()
 
-if all_data and len(all_data) > 0:
-    # 3. SIDEBAR: PILIHAN KAWASAN
-    st.sidebar.header("🔍 Tapisan Utama")
+if df_master is not None and not df_master.empty:
+    # 3. SIDEBAR: HANYA TAPISAN DAERAH PENTADBIRAN (DENGAN IKON B&W)
+    st.sidebar.header("🔍 Tapisan Profil JPNS")
     
-    senarai_kawasan = list(all_data.keys())
-    kawasan_terpilih = st.sidebar.selectbox("📂 Pilih Kawasan (Sheet):", options=senarai_kawasan)
-    df_kawasan = all_data[kawasan_terpilih]
+    senarai_pentadbiran = sorted(df_master["Daerah Pentadbiran"].unique().tolist())
+    pentadbiran_terpilih = st.sidebar.selectbox(
+        "❖ Pilih Daerah Pentadbiran:",
+        options=["⊞ SEMUA DAERAH PENTADBIRAN"] + senarai_pentadbiran,
+        index=0
+    )
     
-    senarai_daerah = sorted(df_kawasan["Daerah"].unique().tolist())
-    pilihan_daerah = ["✨ SEMUA DAERAH"] + senarai_daerah
-    daerah_terpilih = st.sidebar.selectbox("📍 Pilih Daerah:", options=pilihan_daerah)
+    # Proses Logik Penapisan
+    df_filtered = df_master.copy()
     
-    if daerah_terpilih == "✨ SEMUA DAERAH":
-        df_filtered = df_kawasan.copy()
-    else:
-        df_filtered = df_kawasan[df_kawasan["Daerah"] == daerah_terpilih].copy()
+    if pentadbiran_terpilih != "⊞ SEMUA DAERAH PENTADBIRAN":
+        df_filtered = df_filtered[df_filtered["Daerah Pentadbiran"] == pentadbiran_terpilih]
 
-    # 4. Ringkasan Eksekutif
+    t_pentadbiran = pentadbiran_terpilih.replace("⊞ ", "")
+    tajuk_kawasan = f"Seluruh Negeri Sembilan" if "SEMUA" in t_pentadbiran else f"Pentadbiran: {t_pentadbiran}"
+
+    # 4. Ringkasan Eksekutif Dinamik
     total_aset = len(df_filtered)
     aset_baik = df_filtered['Status_Bersih'].str.contains('Baik', case=False, na=False).sum()
     
     m1, m2, m3 = st.columns(3)
-    with m1: st.metric(label="📊 Jumlah Aset", value=total_aset)
-    with m2: st.metric(label="📂 Kawasan Aktif", value=kawasan_terpilih)
-    with m3: st.metric(label="✅ Kondisi Baik", value=aset_baik)
+    with m1: st.metric(label="■ Jumlah Keseluruhan Aset", value=f"{total_aset} Buah")
+    with m2: st.metric(label="■ Daerah Pentadbiran Dipapar", value=t_pentadbiran)
+    with m3: st.metric(label="■ Kondisi Berstatus Baik", value=f"{aset_baik} Unit")
         
     st.markdown("---")
 
-    # 5. Visualisasi
+    # 5. Visualisasi Grafik Komprehensif
     col1, col2 = st.columns([1, 1])
     with col1:
-        st.markdown(f"### 📈 Statistik Daerah: {kawasan_terpilih}")
-        kiraan_daerah = df_filtered["Daerah"].value_counts().reset_index()
-        kiraan_daerah.columns = ['Daerah', 'Jumlah']
-        if not kiraan_daerah.empty and total_aset > 0:
-            fig_bar = px.bar(kiraan_daerah, x='Daerah', y='Jumlah', text='Jumlah', color='Daerah', color_discrete_sequence=px.colors.sequential.Greens_r, template='plotly_white')
+        st.markdown("### 📈 Taburan Aset Mengikut Daerah Sivil")
+        kiraan_sivil = df_filtered["Daerah Sivil"].value_counts().reset_index()
+        kiraan_sivil.columns = ['Daerah Sivil', 'Jumlah']
+        if not kiraan_sivil.empty and total_aset > 0:
+            fig_bar = px.bar(kiraan_sivil, x='Daerah Sivil', y='Jumlah', text='Jumlah', color='Daerah Sivil', color_discrete_sequence=px.colors.sequential.Greens_r, template='plotly_white')
             fig_bar.update_traces(textposition='outside')
             st.plotly_chart(fig_bar, use_container_width=True)
         else:
             st.info("Tiada statistik grafik dipaparkan.")
 
     with col2:
-        st.markdown("### 📊 Status Kondisi Aset")
+        st.markdown("### 📊 Status Kondisi & Kefungsian Semasa")
         kiraan_status = df_filtered["Status_Bersih"].value_counts().reset_index()
         kiraan_status.columns = ['Status Kondisi', 'Jumlah']
         if not kiraan_status.empty and total_aset > 0:
@@ -212,20 +247,18 @@ if all_data and len(all_data) > 0:
         else:
             st.info("Tiada statistik status dipaparkan.")
 
-    # 6. Jadual Perincian
-    st.markdown(f"### 📋 Senarai Aset: {kawasan_terpilih}")
+    # 6. Jadual Perincian Utama
+    st.markdown(f"### 📋 Log Perincian Data: {tajuk_kawasan}")
     
-    tab1, tab2 = st.tabs(["🗂️ Jadual Pangkalan Data", "🏢 Ringkasan Jenis"])
+    tab1, tab2 = st.tabs(["🗂️ Jadual Pangkalan Data Penuh", "🏢 Ringkasan Jenis Bangunan"])
     
     with tab1:
-        # KITA KELUARKAN LAJUR GAMBAR DARI JADUAL UTAMA SUPAYA JADUAL KEMBALI KEMAS & TIDAK MEMANJANG
-        lajur_paparan = ['Gambar / Perkara', 'Lokasi', 'Daerah', 'Status_Bersih', 'Jenis_Bangunan', 'Pautan_Peta']
+        lajur_paparan = ['Gambar / Perkara', 'Lokasi', 'Daerah Sivil', 'Daerah Pentadbiran', 'Status_Bersih', 'Jenis_Bangunan', 'Pautan_Peta']
         lajur_paparan = [kolum for kolum in lajur_paparan if kolum in df_filtered.columns]
         
         if total_aset > 0:
             df_display = df_filtered[lajur_paparan].copy()
             df_display = df_display.astype(str).replace(['nan', 'None', '<NA>'], '-')
-            
             if 'Pautan_Peta' in df_display.columns:
                 df_display['Pautan_Peta'] = df_display['Pautan_Peta'].replace('-', None)
                 
@@ -248,34 +281,35 @@ if all_data and len(all_data) > 0:
         else:
             st.info("Tiada ringkasan kategori.")
 
-    # --- 🌟 CARA 2: BAHAGIAN GALERI ALBUM FOTO PREMIUM DI BAWAH JADUAL ---
+    # --- BAHAGIAN GALERI ALBUM GABUNGAN PREMIUM DI BAWAH JADUAL ---
     st.markdown("---")
     st.markdown("### 📸 Galeri Album Foto Aset Pilihan")
-    st.markdown("*Sila pilih nama bangunan di bawah untuk melihat koleksi penuh gambar dalam saiz besar dan jelas.*")
+    st.markdown("*Sila pilih nama bangunan di bawah untuk melihat semua koleksi gambar.*")
     
     if total_aset > 0:
         senarai_nama_aset = sorted(df_filtered['Gambar / Perkara'].unique().tolist())
-        aset_dipilih = st.selectbox("🎯 Pilih Bangunan / Perkara Kaji:", options=senarai_nama_aset)
+        aset_dipilih = st.selectbox("❖ Pilih Bangunan / Perkara Kaji:", options=senarai_nama_aset)
         
-        # Ambil baris data bagi aset yang dipilih sahaja
         df_aset_tunggal = df_filtered[df_filtered['Gambar / Perkara'] == aset_dipilih]
-        
         if not df_aset_tunggal.empty:
-            senarai_imej = df_aset_tunggal.iloc[0]['Senarai_Imej']
+            senarai_imej = []
+            for _, r in df_aset_tunggal.iterrows():
+                if isinstance(r['Senarai_Imej'], list):
+                    senarai_imej.extend(r['Senarai_Imej'])
             
-            if senarai_imej and len(senarai_imej) > 0:
+            senarai_imej = list(dict.fromkeys(senarai_imej)) # Buang link bertindih jika ada
+            
+            if len(senarai_imej) > 0:
                 num_images = len(senarai_imej)
-                # Maksimum susunan 3 gambar sebaris untuk susunan grid interaktif yang premium
                 cols = st.columns(min(num_images, 3))
-                
                 for idx, img_url in enumerate(senarai_imej):
                     col_idx = idx % 3
                     with cols[col_idx]:
-                        st.image(img_url, caption=f"Pandangan {idx+1}: {aset_dipilih}", use_container_width=True)
+                        st.image(img_url, caption=f"Gambar {idx+1}: {aset_dipilih}", use_container_width=True)
             else:
                 st.info("ℹ️ Tiada fail imej dimasukkan untuk aset ini di dalam Excel atau pautan Google Drive tidak sah.")
     else:
         st.info("Tiada aset tersedia untuk paparan galeri.")
 
 else:
-    st.error("Ralat Utama: Gagal membaca lembaran data (sheets) daripada Excel. Pastikan ia telah ditutup daripada perisian Microsoft Excel.")
+    st.error("Ralat Utama: Fail 'data.xlsx' kosong atau tiada data lajur 'Daerah Sivil' atau 'Daerah Pentadbiran' yang sah dijumpai.")
