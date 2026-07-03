@@ -4,7 +4,6 @@ import plotly.express as px
 import os
 import glob
 import re
-import streamlit.components.v1 as components
 
 # Konfigurasi Halaman Dashboard
 st.set_page_config(page_title="Dashboard Aset JPNS", page_icon="🌲", layout="wide")
@@ -209,7 +208,7 @@ if not df.empty:
 
     st.markdown("---")
 
-    # --- 2. DIBAWAH: GAMBAR ASET BANGUNAN (PAPAR DUA-DUA SERENTAK) ---
+    # --- 2. DIBAWAH: GAMBAR ASET BANGUNAN (PRO CORPORATE LOOK - KLIK GAMBAR TERUS BUKA NEW TAB) ---
     st.subheader("🖼️ Gambar Aset Bangunan")
     
     df_gambar = df_tapis.dropna(subset=['Pautan Gambar', 'Perkara'])
@@ -221,19 +220,32 @@ if not df.empty:
             links_list = [link.strip() for link in str(links_str).split(",") if 'http' in link]
             
             if links_list:
-                # Cipta kolum mengikut jumlah link yang ada supaya keluar serentak
+                # Paparan 2 kolum gambar secara berkembar
                 img_cols = st.columns(len(links_list))
                 
                 for idx, link_terpilih in enumerate(links_list):
                     with img_cols[idx]:
-                        if "drive.google.com/file/d/" in link_terpilih:
-                            try:
-                                file_id = link_terpilih.split("/d/")[1].split("/")[0]
-                                iframe_url = f"https://drive.google.com/file/d/{file_id}/preview"
-                                st.markdown(f"**📸 Pandangan Gambar {idx+1}**")
-                                components.iframe(iframe_url, width=550, height=400)
-                            except:
-                                st.warning(f"⚠️ Gagal memaparkan Gambar {idx+1} secara automatik.")
+                        # Ekstrak File ID secara tepat daripada pautan Drive asal data Boss
+                        file_id = None
+                        if "/d/" in link_terpilih:
+                            file_id = link_terpilih.split("/d/")[1].split("/")[0]
+                        elif "id=" in link_terpilih:
+                            file_id = link_terpilih.split("id=")[1].split("&")[0]
+                            
+                        if file_id:
+                            # Menggunakan endpoint bypass yang stabil untuk memaparkan imej di dashboard
+                            bypass_view_url = f"https://lh3.googleusercontent.com/d/{file_id}"
+                            
+                            # HTML PRO: Tiada teks sekolah, gambar terpapar cun, klik terus besarkan di tab baru
+                            st.markdown(
+                                f'<div style="text-align: center; margin-bottom: 5px;"><b>📸 Pandangan Gambar {idx+1}</b></div>'
+                                f'<a href="{link_terpilih}" target="_blank">'
+                                f'<img src="{bypass_view_url}" style="width:100%; max-height:450px; object-fit:contain; border-radius:6px; border:1px solid #ddd; cursor:pointer;">'
+                                '</a>',
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            st.markdown(f"🔗 [Pautan Manual Gambar {idx+1}]({link_terpilih})")
             else:
                 st.info("Tiada imej yang sah dijumpai.")
     else:
