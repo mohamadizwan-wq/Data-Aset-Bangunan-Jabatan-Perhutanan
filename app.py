@@ -5,7 +5,7 @@ import os
 import glob
 import re
 
-# Konfigurasi Halaman Dashboard
+# Konfigurasi Halaman Dashboard (Wide Layout)
 st.set_page_config(page_title="Dashboard Aset JPNS", page_icon="🌲", layout="wide")
 
 current_dir = os.getcwd()
@@ -31,7 +31,7 @@ with col2:
 
 st.markdown("<hr style='border:1px solid #4CAF50'>", unsafe_allow_html=True)
 
-# --- FUNGSI BACA DATA Khas JPNS ---
+# --- FUNGSI BACA DATA KHAS JPNS (Logik Block_ID) ---
 @st.cache_data
 def load_data():
     df_list = []
@@ -123,7 +123,7 @@ df = load_data()
 
 if not df.empty:
     # --- BAHAGIAN SIDEBAR ---
-    st.sidebar.header("🏛️ Pilihan Pentadbiran Dan Kategori")
+    st.sidebar.header("🏛️ Kategori & Pentadbiran")
     
     daerah_col = None
     for col in df.columns:
@@ -166,7 +166,7 @@ if not df.empty:
     
     st.markdown("---")
     
-    # --- BAHAGIAN CARTA (VISUALISASI) ---
+    # --- BAHAGIAN CARTA (VISUALISASI EXPRES) ---
     c1, c2 = st.columns(2)
     with c1:
         st.write("**Taburan Aset Mengikut Daerah Pentadbiran**")
@@ -186,7 +186,7 @@ if not df.empty:
 
     st.markdown("---")
 
-    # --- 1. JADUAL PILIHAN & MAPS DI ATAS ---
+    # --- BAHAGIAN JADUAL TERPERINCI (LINKCOLUMN FOR MAPS) ---
     st.subheader("📋 Senarai Terperinci Aset Bangunan")
     kolum_wujud = []
     for k in ['Kategori_Aset', 'Perkara', 'Lokasi', 'Daerah Pentadbiran', 'Daerah Sivil', 'Status', 'Pautan Maps']:
@@ -208,48 +208,49 @@ if not df.empty:
 
     st.markdown("---")
 
-    # --- 2. DIBAWAH: GAMBAR ASET BANGUNAN (PRO CORPORATE LOOK - KLIK GAMBAR TERUS BUKA NEW TAB) ---
-    st.subheader("🖼️ Gambar Aset Bangunan")
+    # --- DROPDOWN ASET & PREMANENT LOOK GALERI GAMBAR (2 LAJUR BERKEMBAR) ---
+    st.subheader("🖼️ Galeri Gambar Semakan Aset")
     
     df_gambar = df_tapis.dropna(subset=['Pautan Gambar', 'Perkara'])
     if not df_gambar.empty:
-        pilihan_aset = st.selectbox("Sila pilih aset untuk melihat gambar:", df_gambar['Perkara'].unique())
+        pilihan_aset = st.selectbox("Sila pilih aset untuk meneliti struktur bangunan:", df_gambar['Perkara'].unique())
         
         if pilihan_aset:
             links_str = df_gambar[df_gambar['Perkara'] == pilihan_aset]['Pautan Gambar'].iloc[0]
             links_list = [link.strip() for link in str(links_str).split(",") if 'http' in link]
             
             if links_list:
-                # Paparan 2 kolum gambar secara berkembar
-                img_cols = st.columns(len(links_list))
-                
-                for idx, link_terpilih in enumerate(links_list):
-                    with img_cols[idx]:
-                        # Ekstrak File ID secara tepat daripada pautan Drive asal data Boss
-                        file_id = None
-                        if "/d/" in link_terpilih:
-                            file_id = link_terpilih.split("/d/")[1].split("/")[0]
-                        elif "id=" in link_terpilih:
-                            file_id = link_terpilih.split("id=")[1].split("&")[0]
-                            
-                        if file_id:
-                            # Menggunakan endpoint bypass yang stabil untuk memaparkan imej di dashboard
-                            bypass_view_url = f"https://lh3.googleusercontent.com/d/{file_id}"
-                            
-                            # HTML PRO: Tiada teks sekolah, gambar terpapar cun, klik terus besarkan di tab baru
-                            st.markdown(
-                                f'<div style="text-align: center; margin-bottom: 5px;"><b>📸 Pandangan Gambar {idx+1}</b></div>'
-                                f'<a href="{link_terpilih}" target="_blank">'
-                                f'<img src="{bypass_view_url}" style="width:100%; max-height:450px; object-fit:contain; border-radius:6px; border:1px solid #ddd; cursor:pointer;">'
-                                '</a>',
-                                unsafe_allow_html=True
-                            )
-                        else:
-                            st.markdown(f"🔗 [Pautan Manual Gambar {idx+1}]({link_terpilih})")
+                # Memproses susunan gambar ke dalam grid 2-lajur berkembar secara bersih
+                for i in range(0, len(links_list), 2):
+                    pasangan_links = links_list[i:i+2]
+                    img_cols = st.columns(2)
+                    
+                    for idx, link_terpilih in enumerate(pasangan_links):
+                        posisi_asal = i + idx
+                        with img_cols[idx]:
+                            file_id = None
+                            if "/d/" in link_terpilih:
+                                file_id = link_terpilih.split("/d/")[1].split("/")[0]
+                            elif "id=" in link_terpilih:
+                                file_id = link_terpilih.split("id=")[1].split("&")[0]
+                                
+                            if file_id:
+                                bypass_view_url = f"https://lh3.googleusercontent.com/d/{file_id}"
+                                
+                                # HTML PREMIUM LOOK: Klik terus buka imej penuh/bersih di tab baharu tanpa iframe
+                                st.markdown(
+                                    f'<div style="text-align: left; margin-bottom: 6px; color: #333;"><b>📸 Pandangan Gambar {posisi_asal+1}</b></div>'
+                                    f'<a href="{bypass_view_url}" target="_blank">'
+                                    f'<img src="{bypass_view_url}" style="width:100%; height:320px; object-fit:cover; border-radius:8px; border:1px solid #e0e0e0; transition: transform .2s;">'
+                                    f'</a>',
+                                    unsafe_allow_html=True
+                                )
+                            else:
+                                st.markdown(f"🔗 [Pautan Manual Gambar {posisi_asal+1}]({link_terpilih})")
             else:
-                st.info("Tiada imej yang sah dijumpai.")
+                st.info("Tiada imej yang sah ditemui bagi pautan yang didaftarkan.")
     else:
-        st.info("Tiada data pautan gambar Google Drive untuk aset yang ditapis.")
+        st.info("Tiada data pautan gambar Google Drive untuk aset di bawah penapisan semasa.")
 
 else:
-    st.error("Sistem gagal membaca jadual. Pastikan fail ada di dalam folder.")
+    st.error("Sistem gagal memuat naik data. Sila pastikan fail data.xlsx atau CSV diletakkan dalam direktori yang betul.")
