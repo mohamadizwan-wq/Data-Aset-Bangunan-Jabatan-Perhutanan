@@ -5,12 +5,16 @@ import os
 import glob
 import re
 
-# Konfigurasi Halaman Dashboard (Wide Layout)
+# ==========================================
+# 1. KONFIGURASI HALAMAN (WIDE LAYOUT)
+# ==========================================
 st.set_page_config(page_title="Dashboard Aset JPNS", page_icon="🌲", layout="wide")
 
 current_dir = os.getcwd()
 
-# --- REKABENTUK HEADER & PENGESAN LOGO AUTOMATIK ---
+# ==========================================
+# 2. REKABENTUK HEADER & PENGESAN LOGO AUTOMATIK
+# ==========================================
 col1, col2 = st.columns([1, 6])
 with col1:
     senarai_logo = glob.glob(os.path.join(current_dir, "*[L|l][O|o][G|g][O|o]*.*"))
@@ -31,8 +35,12 @@ with col2:
 
 st.markdown("<hr style='border:1px solid #4CAF50'>", unsafe_allow_html=True)
 
-# --- FUNGSI BACA DATA KHAS JPNS (Logik Block_ID) ---
-@st.cache_data
+
+# ==========================================
+# 3. FUNGSI BACA DATA KHAS JPNS (LOGIK BLOCK_ID)
+# ==========================================
+# Guna ttl=10 supaya auto-refresh data dari GitHub dalam masa 10 saat tanpa reboot manual
+@st.cache_data(ttl=10)
 def load_data():
     df_list = []
     
@@ -73,7 +81,7 @@ def load_data():
         df_bersih['Kategori_Aset'] = nama_kategori
         return df_bersih
 
-    # Baca CSV
+    # Baca CSV jika ada
     fail_csv_lain = glob.glob(os.path.join(current_dir, "*.csv"))
     for fail_csv in fail_csv_lain:
         for bahasa in ['utf-8', 'cp1252', 'latin1']:
@@ -94,7 +102,7 @@ def load_data():
             except:
                 pass
 
-    # Baca Excel
+    # Baca Excel jika ada
     fail_excel_lain = glob.glob(os.path.join(current_dir, "*.xlsx"))
     for fail_excel in fail_excel_lain:
         if '~$' in fail_excel: continue
@@ -121,8 +129,13 @@ def load_data():
 
 df = load_data()
 
+
+# ==========================================
+# 4. PEMBINAAN ELEMEN DASHBOARD KIRA DATA WUJUD
+# ==========================================
 if not df.empty:
-    # --- BAHAGIAN SIDEBAR ---
+    
+    # --- BAHAGIAN SIDEBAR (LOGIK CASCADING DROPDOWN) ---
     st.sidebar.header("🏛️ Kategori & Pentadbiran")
     
     daerah_col = None
@@ -138,9 +151,17 @@ if not df.empty:
     else:
         pilihan_daerah = "Semua"
 
-    senarai_kategori = ["Semua"] + list(df['Kategori_Aset'].dropna().unique())
+    # LOGIK DINAMIK: Tapis data awal untuk senarai dropdown Kategori Aset
+    if pilihan_daerah != "Semua" and daerah_col:
+        df_untuk_kategori = df[df[daerah_col] == pilihan_daerah]
+    else:
+        df_untuk_kategori = df  # Ambil semua jika pilih "Semua"
+
+    # Dropdown kategori hanya memaparkan apa yang wujud mengikut daerah pilihan!
+    senarai_kategori = ["Semua"] + list(df_untuk_kategori['Kategori_Aset'].dropna().unique())
     pilihan_kategori = st.sidebar.selectbox("Pilih Kategori Aset:", senarai_kategori)
     
+    # PROSES PENAPISAN AKHIR DATA DASHBOARD
     df_tapis = df.copy()
     if pilihan_daerah != "Semua" and daerah_col:
         df_tapis = df_tapis[df_tapis[daerah_col] == pilihan_daerah]
@@ -208,7 +229,7 @@ if not df.empty:
 
     st.markdown("---")
 
-    # --- DROPDOWN ASET & PREMANENT LOOK GALERI GAMBAR (2 LAJUR BERKEMBAR) ---
+    # --- DROPDOWN ASET & PREMIUM LOOK GALERI GAMBAR (2 LAJUR BERKEMBAR) ---
     st.subheader("🖼️ Galeri Gambar Semakan Aset")
     
     df_gambar = df_tapis.dropna(subset=['Pautan Gambar', 'Perkara'])
@@ -237,7 +258,7 @@ if not df.empty:
                             if file_id:
                                 bypass_view_url = f"https://lh3.googleusercontent.com/d/{file_id}"
                                 
-                                # HTML PREMIUM LOOK: Klik terus buka imej penuh/bersih di tab baharu tanpa iframe
+                                # HTML PREMIUM LOOK: Gambar cun & klik terus buka gambar penuh di tab baharu bersih tanpa iframe
                                 st.markdown(
                                     f'<div style="text-align: left; margin-bottom: 6px; color: #333;"><b>📸 Pandangan Gambar {posisi_asal+1}</b></div>'
                                     f'<a href="{bypass_view_url}" target="_blank">'
