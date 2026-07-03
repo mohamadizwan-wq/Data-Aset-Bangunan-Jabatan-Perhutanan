@@ -13,6 +13,27 @@ st.set_page_config(page_title="Dashboard Aset JPNS", page_icon="🌲", layout="w
 current_dir = os.getcwd()
 
 # ==========================================
+# CSS PREMIUM: SOROK IKON SEMAK DI ATAS KANAN
+# ==========================================
+# Kod ini akan menapis dan menyorokkan butang deploy, kilat, dan github, 
+# tetapi mengekalkan butang Tiga Titik (⋮) sahaja untuk pengguna.
+st.markdown(
+    """
+    <style>
+    /* Sorok butang deploy dan ikon-ikon tambahan di bahagian header */
+    .stActionButton, div[data-testid="stHeaderActionElements"] {
+        display: none !important;
+    }
+    /* Memastikan ruang atas kanan kelihatan bersih */
+    header {
+        background-color: rgba(0,0,0,0) !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# ==========================================
 # 2. REKABENTUK HEADER & PENGESAN LOGO AUTOMATIK
 # ==========================================
 col1, col2 = st.columns([1, 6])
@@ -254,13 +275,10 @@ if not df.empty:
     # ==============================================================================
     st.subheader("🖼️ Galeri Gambar Semakan Aset")
     
-    # Hanya senaraikan aset yang ada pautan gambar
     df_gambar = df_tapis.dropna(subset=['Pautan Gambar', 'Perkara'])
     
     if not df_gambar.empty:
         senarai_aset_gambar = df_gambar['Perkara'].unique()
-        
-        # Susunan dropdown aset
         pilihan_aset = st.selectbox("Sila pilih aset untuk meneliti struktur bangunan:", senarai_aset_gambar)
         
         if pilihan_aset:
@@ -270,10 +288,9 @@ if not df.empty:
             if links_list:
                 st.markdown("### 📸 Visualisasi Struktur Bangunan (Klik gambar untuk besarkan)")
                 
-                # Memproses susunan gambar ke dalam grid 2-lajur berkembar bersih (chunk by 2)
                 for i in range(0, len(links_list), 2):
                     pasangan_links = links_list[i:i+2]
-                    img_cols = st.columns(2)  # Paksa 2 lajur sahaja
+                    img_cols = st.columns(2)
                     
                     for idx, link_terpilih in enumerate(pasangan_links):
                         posisi_asal = i + idx
@@ -285,10 +302,8 @@ if not df.empty:
                                 file_id = link_terpilih.split("id=")[1].split("&")[0]
                                 
                             if file_id:
-                                # Menggunakan endpoint Googleusercontent untuk kestabilan pukal
                                 bypass_view_url = f"https://lh3.googleusercontent.com/d/{file_id}"
                                 
-                                # HTML PREMIUM LOOK: Tiada iframe kelabu, object-fit: cover untuk kemas, klik buka new tab bersih.
                                 st.markdown(
                                     f'''
                                     <div style="text-align: left; margin-bottom: 15px; color: #333;">
