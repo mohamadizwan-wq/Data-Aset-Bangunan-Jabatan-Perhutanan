@@ -39,7 +39,6 @@ st.markdown("<hr style='border:1px solid #4CAF50'>", unsafe_allow_html=True)
 # ==========================================
 # 3. FUNGSI BACA DATA KHAS JPNS (LOGIK BLOCK_ID)
 # ==========================================
-# Guna ttl=10 supaya auto-refresh data dari GitHub dalam masa 10 saat tanpa reboot manual
 @st.cache_data(ttl=10)
 def load_data():
     df_list = []
@@ -131,7 +130,7 @@ df = load_data()
 
 
 # ==========================================
-# 4. PEMBINAAN ELEMEN DASHBOARD KIRA DATA WUJUD
+# 4. PEMBINAAN ELEMEN DASHBOARD
 # ==========================================
 if not df.empty:
     
@@ -155,13 +154,13 @@ if not df.empty:
     if pilihan_daerah != "Semua" and daerah_col:
         df_untuk_kategori = df[df[daerah_col] == pilihan_daerah]
     else:
-        df_untuk_kategori = df  # Ambil semua jika pilih "Semua"
+        df_untuk_kategori = df
 
-    # Dropdown kategori hanya memaparkan apa yang wujud mengikut daerah pilihan!
+    # Dropdown kategori ikut daerah pilihan
     senarai_kategori = ["Semua"] + list(df_untuk_kategori['Kategori_Aset'].dropna().unique())
     pilihan_kategori = st.sidebar.selectbox("Pilih Kategori Aset:", senarai_kategori)
     
-    # PROSES PENAPISAN AKHIR DATA DASHBOARD
+    # PROSES PENAPISAN AWAL DATA DASHBOARD
     df_tapis = df.copy()
     if pilihan_daerah != "Semua" and daerah_col:
         df_tapis = df_tapis[df_tapis[daerah_col] == pilihan_daerah]
@@ -170,21 +169,42 @@ if not df.empty:
         
     # --- BAHAGIAN RINGKASAN METRIK (KPI) ---
     st.subheader("📊 Ringkasan Prestasi Aset Semasa")
-    m1, m2, m3 = st.columns(3)
-    jumlah_aset = len(df_tapis)
     
     status_col = next((col for col in df_tapis.columns if 'status' in col.lower() or 'kefungsian' in col.lower()), None)
+    
+    # Kriteria Penapisan Status Khusus (Ambil kira ayat penyelenggaraan)
+    kriteria_baik = 'Baik|Guna|Aktif'
+    kriteria_rosak = 'Rosak|Perlu|Proses|Penyelenggaraan|Penambahbaikan'
+    
+    # Kira bilangan berdasarkan status
+    jumlah_aset_kpi = len(df_tapis)
     if status_col:
-        aset_rosak = len(df_tapis[df_tapis[status_col].astype(str).str.contains('Rosak|Perlu', case=False, na=False)])
-        aset_baik = len(df_tapis[df_tapis[status_col].astype(str).str.contains('Baik|Guna|Aktif', case=False, na=False)])
+        aset_baik_kpi = len(df_tapis[df_tapis[status_col].astype(str).str.contains(kriteria_baik, case=False, na=False)])
+        aset_rosak_kpi = len(df_tapis[df_tapis[status_col].astype(str).str.contains(kriteria_rosak, case=False, na=False)])
     else:
-        aset_rosak = 0
-        aset_baik = 0
+        aset_baik_kpi = 0
+        aset_rosak_kpi = 0
+
+    # Paparan Metrik Kad KPI (Guna ejaan korporat)
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Jumlah Keseluruhan Aset", f"{jumlah_aset_kpi} Unit")
+    m2.metric("🟢 Aset Berkeadaan Baik", f"{aset_baik_kpi} Unit")
+    m3.metric("🔴 Aset Rosak/Selenggara", f"{aset_rosak_kpi} Unit")
     
-    m1.metric("Jumlah Keseluruhan Aset", f"{jumlah_aset} Unit")
-    m2.metric("🟢 Aset Keadaan Baik", f"{aset_baik} Unit")
-    m3.metric("🔴 Aset Rosak/Senggara", f"{aset_rosak} Unit")
+    # --- TAPISAN PANTAS KONDISI ASET ---
+    st.markdown("### 🔍 Tapisan Pantas Kondisi Aset")
+    pilihan_status = st.radio(
+        "Pilih untuk mengecilkan skop senarai jadual dan paparan gambar di bawah:",
+        ["Papar Semua Aset", "🟢 Aset Berkeadaan Baik", "🔴 Aset Rosak/Selenggara"],
+        horizontal=True
+    )
     
+    # Lakukan tapisan kedua pada df_tapis berdasarkan klik radio
+    if pilihan_status == "🟢 Aset Berkeadaan Baik" and status_col:
+        df_tapis = df_tapis[df_tapis[status_col].astype(str).str.contains(kriteria_baik, case=False, na=False)]
+    elif pilihan_status == "🔴 Aset Rosak/Selenggara" and status_col:
+        df_tapis = df_tapis[df_tapis[status_col].astype(str).str.contains(kriteria_rosak, case=False, na=False)]
+
     st.markdown("---")
     
     # --- BAHAGIAN CARTA (VISUALISASI EXPRES) ---
@@ -207,7 +227,7 @@ if not df.empty:
 
     st.markdown("---")
 
-    # --- BAHAGIAN JADUAL TERPERINCI (LINKCOLUMN FOR MAPS) ---
+    # --- BAHAGIAN JADUAL TERPERINCI (DITAPIS DINAMIK) ---
     st.subheader("📋 Senarai Terperinci Aset Bangunan")
     kolum_wujud = []
     for k in ['Kategori_Aset', 'Perkara', 'Lokasi', 'Daerah Pentadbiran', 'Daerah Sivil', 'Status', 'Pautan Maps']:
@@ -229,22 +249,31 @@ if not df.empty:
 
     st.markdown("---")
 
-    # --- DROPDOWN ASET & PREMIUM LOOK GALERI GAMBAR (2 LAJUR BERKEMBAR) ---
+    # ==============================================================================
+    # 5. DROPDOWN ASET & GALERI GAMBAR PREMIUM (2 LAJUR BERKEMBAR - STABIL)
+    # ==============================================================================
     st.subheader("🖼️ Galeri Gambar Semakan Aset")
     
+    # Hanya senaraikan aset yang ada pautan gambar
     df_gambar = df_tapis.dropna(subset=['Pautan Gambar', 'Perkara'])
+    
     if not df_gambar.empty:
-        pilihan_aset = st.selectbox("Sila pilih aset untuk meneliti struktur bangunan:", df_gambar['Perkara'].unique())
+        senarai_aset_gambar = df_gambar['Perkara'].unique()
+        
+        # Susunan dropdown aset
+        pilihan_aset = st.selectbox("Sila pilih aset untuk meneliti struktur bangunan:", senarai_aset_gambar)
         
         if pilihan_aset:
             links_str = df_gambar[df_gambar['Perkara'] == pilihan_aset]['Pautan Gambar'].iloc[0]
             links_list = [link.strip() for link in str(links_str).split(",") if 'http' in link]
             
             if links_list:
-                # Memproses susunan gambar ke dalam grid 2-lajur berkembar secara bersih
+                st.markdown("### 📸 Visualisasi Struktur Bangunan (Klik gambar untuk besarkan)")
+                
+                # Memproses susunan gambar ke dalam grid 2-lajur berkembar bersih (chunk by 2)
                 for i in range(0, len(links_list), 2):
                     pasangan_links = links_list[i:i+2]
-                    img_cols = st.columns(2)
+                    img_cols = st.columns(2)  # Paksa 2 lajur sahaja
                     
                     for idx, link_terpilih in enumerate(pasangan_links):
                         posisi_asal = i + idx
@@ -256,14 +285,19 @@ if not df.empty:
                                 file_id = link_terpilih.split("id=")[1].split("&")[0]
                                 
                             if file_id:
+                                # Menggunakan endpoint Googleusercontent untuk kestabilan pukal
                                 bypass_view_url = f"https://lh3.googleusercontent.com/d/{file_id}"
                                 
-                                # HTML PREMIUM LOOK: Gambar cun & klik terus buka gambar penuh di tab baharu bersih tanpa iframe
+                                # HTML PREMIUM LOOK: Tiada iframe kelabu, object-fit: cover untuk kemas, klik buka new tab bersih.
                                 st.markdown(
-                                    f'<div style="text-align: left; margin-bottom: 6px; color: #333;"><b>📸 Pandangan Gambar {posisi_asal+1}</b></div>'
-                                    f'<a href="{bypass_view_url}" target="_blank">'
-                                    f'<img src="{bypass_view_url}" style="width:100%; height:320px; object-fit:cover; border-radius:8px; border:1px solid #e0e0e0; transition: transform .2s;">'
-                                    f'</a>',
+                                    f'''
+                                    <div style="text-align: left; margin-bottom: 15px; color: #333;">
+                                        <div style="margin-bottom: 5px;"><b>📸 Pandangan Gambar {posisi_asal+1}</b></div>
+                                        <a href="{bypass_view_url}" target="_blank">
+                                            <img src="{bypass_view_url}" style="width:100%; max-height:400px; object-fit:cover; border-radius:10px; border:1px solid #ddd; cursor:pointer;">
+                                        </a>
+                                    </div>
+                                    ''',
                                     unsafe_allow_html=True
                                 )
                             else:
