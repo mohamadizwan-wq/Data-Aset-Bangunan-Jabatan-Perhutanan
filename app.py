@@ -155,13 +155,22 @@ if not df.empty:
     # --- BAHAGIAN SIDEBAR (LOGIK CASCADING DROPDOWN) ---
     st.sidebar.header("🏛️ Kategori & Pentadbiran")
     
+    # Deteksi lajur pentadbiran/daerah
     daerah_col = None
+    daerah_sivil_col = None
+    
     for col in df.columns:
-        if 'pentadbiran' in col.lower() or 'daerah' in col.lower():
+        if 'pentadbiran' in col.lower():
             daerah_col = col
-            if 'pentadbiran' in col.lower():
-                break 
-                
+        elif 'sivil' in col.lower():
+            daerah_sivil_col = col
+            
+    # Jika pengesanan automatik gagal, guna fallback nama lajur kasar
+    if not daerah_col:
+        daerah_col = next((col for col in df.columns if 'daerah' in col.lower()), None)
+    if not daerah_sivil_col:
+        daerah_sivil_col = next((col for col in df.columns if 'sivil' in col.lower()), None)
+    
     if daerah_col:
         senarai_daerah = ["Semua"] + list(df[daerah_col].dropna().unique())
         pilihan_daerah = st.sidebar.selectbox("Pilih Daerah Pentadbiran:", senarai_daerah)
@@ -224,23 +233,38 @@ if not df.empty:
 
     st.markdown("---")
     
-    # --- BAHAGIAN CARTA (VISUALISASI EXPRES) ---
+    # --- BAHAGIAN VISUALISASI CARTA (REKABENTUK STRUKTUR BARU) ---
+    st.subheader("📈 Analisis Visual Data Aset")
+    
+    # Baris Pertama: Dua Carta Bar (Daerah Pentadbiran vs Daerah Sivil)
     c1, c2 = st.columns(2)
     with c1:
-        st.write("**Taburan Aset Mengikut Daerah Pentadbiran**")
+        st.write("**Taburan Aset Mengikut Daerah Pentadbiran (Perhutanan)**")
         if daerah_col and not df_tapis[daerah_col].dropna().empty:
             df_daerah_chart = df_tapis[daerah_col].value_counts().reset_index()
-            df_daerah_chart.columns = ['Daerah', 'Bilangan']
-            fig_bar = px.bar(df_daerah_chart, x='Daerah', y='Bilangan', color='Daerah', text_auto=True)
-            st.plotly_chart(fig_bar, use_container_width=True)
+            df_daerah_chart.columns = ['Daerah Pentadbiran', 'Bilangan']
+            fig_bar1 = px.bar(df_daerah_chart, x='Daerah Pentadbiran', y='Bilangan', color='Daerah Pentadbiran', text_auto=True)
+            st.plotly_chart(fig_bar1, use_container_width=True)
+        else:
+            st.info("Data Daerah Pentadbiran tidak ditemui.")
             
     with c2:
-        st.write("**Pecahan Mengikut Kategori**")
-        if not df_tapis['Kategori_Aset'].dropna().empty:
-            df_kat = df_tapis['Kategori_Aset'].value_counts().reset_index()
-            df_kat.columns = ['Kategori', 'Bilangan']
-            fig_pie = px.pie(df_kat, names='Kategori', values='Bilangan', hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel)
-            st.plotly_chart(fig_pie, use_container_width=True)
+        st.write("**Taburan Aset Mengikut Daerah Sivil (Negeri)**")
+        if daerah_sivil_col and not df_tapis[daerah_sivil_col].dropna().empty:
+            df_sivil_chart = df_tapis[daerah_sivil_col].value_counts().reset_index()
+            df_sivil_chart.columns = ['Daerah Sivil', 'Bilangan']
+            fig_bar2 = px.bar(df_sivil_chart, x='Daerah Sivil', y='Bilangan', color='Daerah Sivil', text_auto=True, color_discrete_sequence=px.colors.qualitative.Dark2)
+            st.plotly_chart(fig_bar2, use_container_width=True)
+        else:
+            st.info("Lajur 'Daerah Sivil' tidak ditemui dalam fail data Excel/CSV.")
+
+    # Baris Kedua: Ditumpukan khusus untuk Chart Pie Kategori (Kekal Besar & Jelas)
+    st.write("**Pecahan Keseluruhan Mengikut Kategori Aset**")
+    if not df_tapis['Kategori_Aset'].dropna().empty:
+        df_kat = df_tapis['Kategori_Aset'].value_counts().reset_index()
+        df_kat.columns = ['Kategori', 'Bilangan']
+        fig_pie = px.pie(df_kat, names='Kategori', values='Bilangan', hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel)
+        st.plotly_chart(fig_pie, use_container_width=True)
 
     st.markdown("---")
 
@@ -329,7 +353,7 @@ if fail_sumber:
     fail_terkini = max(fail_sumber, key=os.path.getmtime)
     timestamp = os.path.getmtime(fail_terkini)
     
-    # Guna UTC+8 (Masa Malaysia) tanpa perlukan module pytz luar
+    # Waktu Malaysia UTC+8
     waktu_lokal = datetime.fromtimestamp(timestamp, tz=timezone(timedelta(hours=8)))
     tarikh_kemaskini = waktu_lokal.strftime("%d/%m/%Y, %I:%M %p")
 
