@@ -4,6 +4,7 @@ import plotly.express as px
 import os
 import glob
 import re
+from datetime import datetime, timedelta, timezone
 
 # ==========================================
 # 1. KONFIGURASI HALAMAN (WIDE LAYOUT)
@@ -15,16 +16,12 @@ current_dir = os.getcwd()
 # ==========================================
 # CSS PREMIUM: SOROK IKON SEMAK DI ATAS KANAN
 # ==========================================
-# Kod ini akan menapis dan menyorokkan butang deploy, kilat, dan github, 
-# tetapi mengekalkan butang Tiga Titik (⋮) sahaja untuk pengguna.
 st.markdown(
     """
     <style>
-    /* Sorok butang deploy dan ikon-ikon tambahan di bahagian header */
     .stActionButton, div[data-testid="stHeaderActionElements"] {
         display: none !important;
     }
-    /* Memastikan ruang atas kanan kelihatan bersih */
     header {
         background-color: rgba(0,0,0,0) !important;
     }
@@ -193,7 +190,7 @@ if not df.empty:
     
     status_col = next((col for col in df_tapis.columns if 'status' in col.lower() or 'kefungsian' in col.lower()), None)
     
-    # Kriteria Penapisan Status Khusus (Ambil kira ayat penyelenggaraan)
+    # Kriteria Penapisan Status Khusus
     kriteria_baik = 'Baik|Guna|Aktif'
     kriteria_rosak = 'Rosak|Perlu|Proses|Penyelenggaraan|Penambahbaikan'
     
@@ -206,7 +203,7 @@ if not df.empty:
         aset_baik_kpi = 0
         aset_rosak_kpi = 0
 
-    # Paparan Metrik Kad KPI (Guna ejaan korporat)
+    # Paparan Metrik Kad KPI
     m1, m2, m3 = st.columns(3)
     m1.metric("Jumlah Keseluruhan Aset", f"{jumlah_aset_kpi} Unit")
     m2.metric("🟢 Aset Berkeadaan Baik", f"{aset_baik_kpi} Unit")
@@ -220,7 +217,6 @@ if not df.empty:
         horizontal=True
     )
     
-    # Lakukan tapisan kedua pada df_tapis berdasarkan klik radio
     if pilihan_status == "🟢 Aset Berkeadaan Baik" and status_col:
         df_tapis = df_tapis[df_tapis[status_col].astype(str).str.contains(kriteria_baik, case=False, na=False)]
     elif pilihan_status == "🔴 Aset Rosak/Selenggara" and status_col:
@@ -270,11 +266,8 @@ if not df.empty:
 
     st.markdown("---")
 
-    # ==============================================================================
-    # 5. DROPDOWN ASET & GALERI GAMBAR PREMIUM (2 LAJUR BERKEMBAR - STABIL)
-    # ==============================================================================
+    # --- DROPDOWN ASET & GALERI GAMBAR PREMIUM ---
     st.subheader("🖼️ Galeri Gambar Semakan Aset")
-    
     df_gambar = df_tapis.dropna(subset=['Pautan Gambar', 'Perkara'])
     
     if not df_gambar.empty:
@@ -287,11 +280,9 @@ if not df.empty:
             
             if links_list:
                 st.markdown("### 📸 Visualisasi Struktur Bangunan (Klik gambar untuk besarkan)")
-                
                 for i in range(0, len(links_list), 2):
                     pasangan_links = links_list[i:i+2]
                     img_cols = st.columns(2)
-                    
                     for idx, link_terpilih in enumerate(pasangan_links):
                         posisi_asal = i + idx
                         with img_cols[idx]:
@@ -303,7 +294,6 @@ if not df.empty:
                                 
                             if file_id:
                                 bypass_view_url = f"https://lh3.googleusercontent.com/d/{file_id}"
-                                
                                 st.markdown(
                                     f'''
                                     <div style="text-align: left; margin-bottom: 15px; color: #333;">
@@ -323,4 +313,35 @@ if not df.empty:
         st.info("Tiada data pautan gambar Google Drive untuk aset di bawah penapisan semasa.")
 
 else:
-    st.error("Sistem gagal memuat naik data. Sila pastikan fail data.xlsx atau CSV diletakkan dalam direktori yang betul.")
+    st.error("Sistem gagal muat naik data. Pastikan fail data.xlsx/CSV diletakkan dalam direktori yang betul.")
+
+
+# ==============================================================================
+# 6. LOGIK AUTOMATIK TARIKH KEMASKINI & FOOTER PRESTIGE (IZWAN RADZI)
+# ==============================================================================
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("<hr style='border:0.5px solid #e0e0e0'>", unsafe_allow_html=True)
+
+fail_sumber = glob.glob(os.path.join(current_dir, "*.xlsx")) + glob.glob(os.path.join(current_dir, "*.csv"))
+tarikh_kemaskini = "Tidak Diketahui"
+
+if fail_sumber:
+    fail_terkini = max(fail_sumber, key=os.path.getmtime)
+    timestamp = os.path.getmtime(fail_terkini)
+    
+    # Guna UTC+8 (Masa Malaysia) tanpa perlukan module pytz luar
+    waktu_lokal = datetime.fromtimestamp(timestamp, tz=timezone(timedelta(hours=8)))
+    tarikh_kemaskini = waktu_lokal.strftime("%d/%m/%Y, %I:%M %p")
+
+f1, f2 = st.columns(2)
+with f1:
+    st.markdown(f"⏳ **Kemaskini Data Terakhir:** `{tarikh_kemaskini} (Waktu Malaysia)`")
+with f2:
+    st.markdown(
+        f'''
+        <div style="text-align: right; color: #555; font-size: 14px;">
+            💻 <b>Developer:</b> Izwan Radzi | 🌲 <b>Sistem:</b> Dashboard Bangunan JPNS v1.0
+        </div>
+        ''', 
+        unsafe_allow_html=True
+    )
