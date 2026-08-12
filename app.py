@@ -7,11 +7,24 @@ import re
 from datetime import datetime, timedelta, timezone
 
 # ==========================================
-# 1. KONFIGURASI HALAMAN (WIDE LAYOUT)
+# 1. KONFIGURASI HALAMAN & FAVICON (LOGO TAB BROWSER)
 # ==========================================
-st.set_page_config(page_title="Dashboard Aset JPNS", page_icon="🌲", layout="wide")
-
 current_dir = os.getcwd()
+
+# Cari fail logo dalam folder Github untuk dijadikan ikon tab browser
+senarai_logo_favicon = glob.glob(os.path.join(current_dir, "*[L|l][O|o][G|g][O|o]*.*"))
+favicon_path = "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Jata_Negara_Malaysia.png/200px-Jata_Negara_Malaysia.png"
+
+for fail in senarai_logo_favicon:
+    if fail.lower().endswith(('.png', '.jpg', '.jpeg', '.ico')):
+        favicon_path = fail
+        break
+
+st.set_page_config(
+    page_title="Dashboard Aset JPNS", 
+    page_icon=favicon_path, 
+    layout="wide"
+)
 
 # ==========================================
 # CSS PREMIUM: SOROK IKON SEMAK DI ATAS KANAN
@@ -35,15 +48,8 @@ st.markdown(
 # ==========================================
 col1, col2 = st.columns([1, 6])
 with col1:
-    senarai_logo = glob.glob(os.path.join(current_dir, "*[L|l][O|o][G|g][O|o]*.*"))
-    logo_path = None
-    for fail in senarai_logo:
-        if fail.lower().endswith(('.png', '.jpg', '.jpeg')):
-            logo_path = fail
-            break
-            
-    if logo_path:
-        st.image(logo_path, width=110)
+    if favicon_path and os.path.exists(favicon_path):
+        st.image(favicon_path, width=110)
     else:
         st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Jata_Negara_Malaysia.png/200px-Jata_Negara_Malaysia.png", width=100)
 
@@ -198,11 +204,7 @@ if not df.empty:
     jumlah_aset_kpi = len(df_tapis)
     if status_col:
         s_series = df_tapis[status_col].astype(str)
-        
-        # Rosak/Selenggara: Mengandungi mana-mana kata kunci di atas
         mask_rosak = s_series.str.contains(kriteria_rosak_regex, case=False, na=False)
-        
-        # Baik: Mengandungi 'Baik' atau 'Aktif' DAN TIDAK MENGANDUNGI kata kunci rosak
         mask_baik = (s_series.str.contains(r'Baik|Aktif', case=False, na=False)) & (~mask_rosak)
         
         aset_baik_kpi = len(df_tapis[mask_baik])
@@ -337,7 +339,7 @@ else:
 
 # ==============================================================================
 # 6. LOGIK AUTOMATIK TARIKH KEMASKINI & FOOTER PRESTIGE (IZWAN RADZI)
-# ==============================================================================
+# ==========================================
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("<hr style='border:0.5px solid #e0e0e0'>", unsafe_allow_html=True)
 
