@@ -57,19 +57,17 @@ st.markdown("<hr style='border:1px solid #4CAF50'>", unsafe_allow_html=True)
 # ==========================================
 # 3. FUNGSI BACA DATA KHAS JPNS (LOGIK BLOCK_ID)
 # ==========================================
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=5)
 def load_data():
     df_list = []
     
     def process_df(df, nama_kategori):
         df.columns = df.columns.astype(str).str.strip()
         
-        for col in df.columns:
-            if 'perkara' in col.lower():
-                df.rename(columns={col: 'Perkara'}, inplace=True)
-                break
-                
-        if 'Perkara' not in df.columns:
+        perkara_col = next((col for col in df.columns if 'perkara' in col.lower()), None)
+        if perkara_col:
+            df.rename(columns={perkara_col: 'Perkara'}, inplace=True)
+        else:
             return pd.DataFrame()
 
         df = df[~df['Perkara'].astype(str).str.contains('Perkara', case=False, na=False)]
@@ -82,6 +80,13 @@ def load_data():
         for block_id, group in df.groupby('Block_ID'):
             baris_utama = group.iloc[0].copy()
             
+            for col in group.columns:
+                if col not in ['Block_ID', 'Perkara']:
+                    values = group[col].dropna().astype(str).str.strip()
+                    values = [v for v in values if v != '' and v.lower() != 'nan']
+                    if values:
+                        baris_utama[col] = " | ".join(list(dict.fromkeys(values)))
+            
             semua_teks = ' '.join(group.fillna('').astype(str).values.flatten())
             urls = re.findall(r'(https?://\S+)', semua_teks)
             urls = [u.strip('",\'') for u in urls]
@@ -89,7 +94,7 @@ def load_data():
             drive_links = [u for u in urls if 'drive.google' in u]
             maps_links = [u for u in urls if 'maps' in u or 'googleusercontent' in u]
             
-            baris_utama['Pautan Gambar'] = ", ".join(list(set(drive_links))) if drive_links else None
+            baris_utama['Pautan Gambar'] = ", ".join(list(dict.fromkeys(drive_links))) if drive_links else None
             baris_utama['Pautan Maps'] = maps_links[0] if maps_links else None
             
             kumpul_data.append(baris_utama)
@@ -98,28 +103,7 @@ def load_data():
         df_bersih['Kategori_Aset'] = nama_kategori
         return df_bersih
 
-    # Baca CSV jika ada
-    fail_csv_lain = glob.glob(os.path.join(current_dir, "*.csv"))
-    for fail_csv in fail_csv_lain:
-        for bahasa in ['utf-8', 'cp1252', 'latin1']:
-            try:
-                temp_df = pd.read_csv(fail_csv, header=None, encoding=bahasa, dtype=str, on_bad_lines='skip')
-                header_idx = -1
-                for i, row in temp_df.iterrows():
-                    if 'perkara' in ' '.join(row.fillna('').astype(str)).lower():
-                        header_idx = i
-                        break
-                if header_idx != -1:
-                    df = pd.read_csv(fail_csv, skiprows=header_idx, encoding=bahasa, on_bad_lines='skip')
-                    nama_kat = os.path.basename(fail_csv).replace("data.xlsx - ", "").replace(".csv", "")
-                    df_bersih = process_df(df, nama_kat)
-                    if not df_bersih.empty:
-                        df_list.append(df_bersih)
-                    break 
-            except:
-                pass
-
-    # Baca Excel jika ada
+    # 1. Baca Excel Dulu
     fail_excel_lain = glob.glob(os.path.join(current_dir, "*.xlsx"))
     for fail_excel in fail_excel_lain:
         if '~$' in fail_excel: continue
@@ -140,6 +124,28 @@ def load_data():
         except:
             pass
 
+    # 2. Baca CSV jika tiada Excel
+    if not df_list:
+        fail_csv_lain = glob.glob(os.path.join(current_dir, "*.csv"))
+        for fail_csv in fail_csv_lain:
+            for bahasa in ['utf-8', 'cp1252', 'latin1']:
+                try:
+                    temp_df = pd.read_csv(fail_csv, header=None, encoding=bahasa, dtype=str, on_bad_lines='skip')
+                    header_idx = -1
+                    for i, row in temp_df.iterrows():
+                        if 'perkara' in ' '.join(row.fillna('').astype(str)).lower():
+                            header_idx = i
+                            break
+                    if header_idx != -1:
+                        df = pd.read_csv(fail_csv, skiprows=header_idx, encoding=bahasa, on_bad_lines='skip')
+                        nama_kat = os.path.basename(fail_csv).replace("data.xlsx - ", "").replace(".csv", "")
+                        df_bersih = process_df(df, nama_kat)
+                        if not df_bersih.empty:
+                            df_list.append(df_bersih)
+                        break 
+                except:
+                    pass
+
     if df_list:
         return pd.concat(df_list, ignore_index=True)
     return pd.DataFrame()
@@ -155,21 +161,11 @@ if not df.empty:
     # --- BAHAGIAN SIDEBAR (LOGIK CASCADING DROPDOWN) ---
     st.sidebar.header("🏛️ Kategori & Pentadbiran")
     
-    # Deteksi lajur pentadbiran/daerah
-    daerah_col = None
-    daerah_sivil_col = None
+    daerah_col = next((col for col in df.columns if 'pentadbiran' in col.lower()), None)
+    daerah_sivil_col = next((col for col in df.columns if 'sivil' in col.lower()), None)
     
-    for col in df.columns:
-        if 'pentadbiran' in col.lower():
-            daerah_col = col
-        elif 'sivil' in col.lower():
-            daerah_sivil_col = col
-            
-    # Jika pengesanan automatik gagal, guna fallback nama lajur kasar
     if not daerah_col:
         daerah_col = next((col for col in df.columns if 'daerah' in col.lower()), None)
-    if not daerah_sivil_col:
-        daerah_sivil_col = next((col for col in df.columns if 'sivil' in col.lower()), None)
     
     if daerah_col:
         senarai_daerah = ["Semua"] + list(df[daerah_col].dropna().unique())
@@ -177,17 +173,14 @@ if not df.empty:
     else:
         pilihan_daerah = "Semua"
 
-    # LOGIK DINAMIK: Tapis data awal untuk senarai dropdown Kategori Aset
     if pilihan_daerah != "Semua" and daerah_col:
         df_untuk_kategori = df[df[daerah_col] == pilihan_daerah]
     else:
         df_untuk_kategori = df
 
-    # Dropdown kategori ikut daerah pilihan
     senarai_kategori = ["Semua"] + list(df_untuk_kategori['Kategori_Aset'].dropna().unique())
     pilihan_kategori = st.sidebar.selectbox("Pilih Kategori Aset:", senarai_kategori)
     
-    # PROSES PENAPISAN AWAL DATA DASHBOARD
     df_tapis = df.copy()
     if pilihan_daerah != "Semua" and daerah_col:
         df_tapis = df_tapis[df_tapis[daerah_col] == pilihan_daerah]
@@ -199,26 +192,30 @@ if not df.empty:
     
     status_col = next((col for col in df_tapis.columns if 'status' in col.lower() or 'kefungsian' in col.lower()), None)
     
-    # Kriteria Penapisan Status Khusus
-    kriteria_baik = 'Baik|Guna|Aktif'
-    kriteria_rosak = 'Rosak|Perlu|Proses|Penyelenggaraan|Penambahbaikan'
+    # LOGIK PENAPISAN STATUS YANG DAH DIBAIKI KETAT & TEPAT
+    kriteria_rosak_regex = r'Rosak|Selenggara|Proses|Penyelenggaraan|Penambahbaikan'
     
-    # Kira bilangan berdasarkan status
     jumlah_aset_kpi = len(df_tapis)
     if status_col:
-        aset_baik_kpi = len(df_tapis[df_tapis[status_col].astype(str).str.contains(kriteria_baik, case=False, na=False)])
-        aset_rosak_kpi = len(df_tapis[df_tapis[status_col].astype(str).str.contains(kriteria_rosak, case=False, na=False)])
+        s_series = df_tapis[status_col].astype(str)
+        
+        # Rosak/Selenggara: Mengandungi mana-mana kata kunci di atas
+        mask_rosak = s_series.str.contains(kriteria_rosak_regex, case=False, na=False)
+        
+        # Baik: Mengandungi 'Baik' atau 'Aktif' DAN TIDAK MENGANDUNGI kata kunci rosak
+        mask_baik = (s_series.str.contains(r'Baik|Aktif', case=False, na=False)) & (~mask_rosak)
+        
+        aset_baik_kpi = len(df_tapis[mask_baik])
+        aset_rosak_kpi = len(df_tapis[mask_rosak])
     else:
         aset_baik_kpi = 0
         aset_rosak_kpi = 0
 
-    # Paparan Metrik Kad KPI
     m1, m2, m3 = st.columns(3)
     m1.metric("Jumlah Keseluruhan Aset", f"{jumlah_aset_kpi} Unit")
     m2.metric("🟢 Aset Berkeadaan Baik", f"{aset_baik_kpi} Unit")
     m3.metric("🔴 Aset Rosak/Selenggara", f"{aset_rosak_kpi} Unit")
     
-    # --- TAPISAN PANTAS KONDISI ASET ---
     st.markdown("### 🔍 Tapisan Pantas Kondisi Aset")
     pilihan_status = st.radio(
         "Pilih untuk mengecilkan skop senarai jadual dan paparan gambar di bawah:",
@@ -227,16 +224,15 @@ if not df.empty:
     )
     
     if pilihan_status == "🟢 Aset Berkeadaan Baik" and status_col:
-        df_tapis = df_tapis[df_tapis[status_col].astype(str).str.contains(kriteria_baik, case=False, na=False)]
+        df_tapis = df_tapis[mask_baik]
     elif pilihan_status == "🔴 Aset Rosak/Selenggara" and status_col:
-        df_tapis = df_tapis[df_tapis[status_col].astype(str).str.contains(kriteria_rosak, case=False, na=False)]
+        df_tapis = df_tapis[mask_rosak]
 
     st.markdown("---")
     
-    # --- BAHAGIAN VISUALISASI CARTA (REKABENTUK STRUKTUR BARU) ---
+    # --- BAHAGIAN VISUALISASI CARTA ---
     st.subheader("📈 Analisis Visual Data Aset")
     
-    # Baris Pertama: Dua Carta Bar (Daerah Pentadbiran vs Daerah Sivil)
     c1, c2 = st.columns(2)
     with c1:
         st.write("**Taburan Aset Mengikut Daerah Pentadbiran (Perhutanan)**")
@@ -256,9 +252,8 @@ if not df.empty:
             fig_bar2 = px.bar(df_sivil_chart, x='Daerah Sivil', y='Bilangan', color='Daerah Sivil', text_auto=True, color_discrete_sequence=px.colors.qualitative.Dark2)
             st.plotly_chart(fig_bar2, use_container_width=True)
         else:
-            st.info("Lajur 'Daerah Sivil' tidak ditemui dalam fail data Excel/CSV.")
+            st.info("Lajur 'Daerah Sivil' tidak ditemui dalam fail data Excel.")
 
-    # Baris Kedua: Ditumpukan khusus untuk Chart Pie Kategori (Kekal Besar & Jelas)
     st.write("**Pecahan Keseluruhan Mengikut Kategori Aset**")
     if not df_tapis['Kategori_Aset'].dropna().empty:
         df_kat = df_tapis['Kategori_Aset'].value_counts().reset_index()
@@ -268,7 +263,7 @@ if not df.empty:
 
     st.markdown("---")
 
-    # --- BAHAGIAN JADUAL TERPERINCI (DITAPIS DINAMIK) ---
+    # --- BAHAGIAN JADUAL TERPERINCI ---
     st.subheader("📋 Senarai Terperinci Aset Bangunan")
     kolum_wujud = []
     for k in ['Kategori_Aset', 'Perkara', 'Lokasi', 'Daerah Pentadbiran', 'Daerah Sivil', 'Status', 'Pautan Maps']:
@@ -353,7 +348,6 @@ if fail_sumber:
     fail_terkini = max(fail_sumber, key=os.path.getmtime)
     timestamp = os.path.getmtime(fail_terkini)
     
-    # Waktu Malaysia UTC+8
     waktu_lokal = datetime.fromtimestamp(timestamp, tz=timezone(timedelta(hours=8)))
     tarikh_kemaskini = waktu_lokal.strftime("%d/%m/%Y, %I:%M %p")
 
